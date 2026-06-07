@@ -1,0 +1,30 @@
+{
+  "name": "xgr-mcp-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP gateway for XGRChain, XDaLa sessions, Explorer data and EVM chain evidence",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/http.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "pg": "^8.16.3",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "latest",
+    "@types/pg": "^8.15.6",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
