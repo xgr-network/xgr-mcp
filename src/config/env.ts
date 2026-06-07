@@ -39,6 +39,7 @@ function getCsvEnv(name: string): string[] {
 
 const operationStoreDir = getEnv('MCP_OPERATION_STORE_DIR', './data/operations');
 const publicHandoffAuditLogPath = getOptionalEnv('MCP_PUBLIC_HANDOFF_AUDIT_LOG_PATH') ?? `${operationStoreDir}/audit/public-handoff.jsonl`;
+const toolUsageLogPath = getOptionalEnv('MCP_TOOL_USAGE_LOG_PATH') ?? `${operationStoreDir}/audit/tool-usage.jsonl`;
 
 export const env = {
   serverName: getEnv('MCP_SERVER_NAME', 'xgr-mcp-gateway'),
@@ -64,6 +65,10 @@ export const env = {
     xdalaBaseUrl: getEnv('MCP_XDALA_SESSION_START_BASE_URL', 'https://xdala.xgr.network/session-start'),
     defaultTtlSeconds: getIntEnv('MCP_SESSION_START_DEFAULT_TTL_SECONDS', 3600),
     maxTtlSeconds: getIntEnv('MCP_SESSION_START_MAX_TTL_SECONDS', 86400)
+  },
+  usage: {
+    enabled: getBoolEnv('MCP_TOOL_USAGE_ENABLED', true),
+    logPath: toolUsageLogPath
   },
   publicHandoff: {
     maxBodyBytes: getIntEnv('MCP_PUBLIC_HANDOFF_MAX_BODY_BYTES', 10485760),
