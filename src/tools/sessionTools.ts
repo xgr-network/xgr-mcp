@@ -3,6 +3,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { explorerClient } from '../adapters/explorerClient.js';
 import { rpcCall } from '../adapters/rpcClient.js';
 
+type WakeupPayloadFieldView = {
+  name: string;
+  type: string;
+  required: boolean;
+  present: boolean;
+  default?: unknown;
+};
+
 type WakeupTargetView = {
   owner: string;
   sessionId: string;
@@ -15,30 +23,11 @@ type WakeupTargetView = {
   iterationStep: number;
   xrc729?: string;
   ostcId?: string;
-};
-
-type WakeupPayloadFieldView = {
-  name: string;
-  type: string;
-  required: boolean;
-  present: boolean;
-  default?: unknown;
-};
-
-type WakeupPayloadSchemaResult = {
-  owner: string;
-  sessionId: string;
-  pid: string;
-  step: string;
-  xrc729?: string;
-  ostcId?: string;
-  rule?: string;
   payloadFields?: WakeupPayloadFieldView[];
   requiredPayload?: WakeupPayloadFieldView[];
   optionalPayload?: WakeupPayloadFieldView[];
   missingPayload?: string[];
   availablePayloadKeys?: string[];
-  payloadSchemaError?: string;
 };
 
 type ListWakeupTargetsByAddressResult = {
@@ -102,7 +91,7 @@ export function registerSessionTools(server: McpServer): void {
     'resolve_wakeup_payload_schema',
     {
       title: 'Resolve XDaLa wake-up payload schema',
-      description: 'Use this to resolve the expected XRC-137 payload fields for one currently WAITING wake-up target from the live XDaLa session runtime state. This returns field names, types, required/optional status and missing required fields, without returning full runtime payload values.',
+      description: 'Use this to resolve payload fields for one currently WAITING wake-up target from the session snapshot returned by xgr_listWakeupTargetsByAddress. This never calls rule loaders or decrypts XRC-137 rules.',
       inputSchema: {
         address: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
         owner: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
@@ -112,9 +101,15 @@ export function registerSessionTools(server: McpServer): void {
       }
     },
     async ({ address, owner, sessionId, pid, step }) => {
-      const request = { address, owner, sessionId, ...(pid ? { pid } : {}), ...(step ? { step } : {}) };
-      const data = await rpcCall<WakeupPayloadSchemaResult>('xgr_getWakeupPayloadSchema', [request]);
-      return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+      const data = await rpcCall<ListWakeupTargetsByAddressResult>('xgr_listWakeupTargetsByAddress', [{ address, last: 100 }]);
+      const target = data.targets.find((item) =>
+        item.owner.toLowerCase() === owner.toLowerCase() &&
+        item.sessionId === sessionId &&
+        (!pid || item.pid === pid) &&
+        (!step || item.step === step)
+      );
+      const result = target ?? { owner, sessionId, pid: pid ?? '', step: step ?? '', payloadSchemaError: 'waiting wake-up target not found or no payload schema snapshot available' };
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );
 
