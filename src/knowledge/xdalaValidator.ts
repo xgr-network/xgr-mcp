@@ -17,6 +17,23 @@ type ValidationResult = {
 type BranchName = 'onValid' | 'onInvalid';
 
 const identRe = /^[A-Za-z][A-Za-z0-9_]*$/;
+const placeholderRe = /\[([A-Za-z][A-Za-z0-9_]*)\]/g;
+const xrcTypes = new Set([
+  'string',
+  'bool',
+  'int64',
+  'uint64',
+  'double',
+  'decimal',
+  'timestamp_ms',
+  'duration_ms',
+  'uuid',
+  'address',
+  'bytes',
+  'bytes32',
+  'uint256',
+  'int256'
+]);
 const forbiddenPlaceholderPatterns = [
   { code: 'DOLLAR_INPUT_PLACEHOLDER', pattern: new RegExp('\\$input\\.'), label: 'dollar-input placeholder syntax' },
   { code: 'DOLLAR_API_PLACEHOLDER', pattern: new RegExp('\\$api\\.'), label: 'dollar-api placeholder syntax' },
@@ -123,14 +140,38 @@ function scanForbiddenPlaceholders(value: unknown, issues: ValidationIssue[], pa
   }, pathPrefix);
 }
 
-function validatePayloadSchema(rule: JsonMap, errors: ValidationIssue[]): void {
+function scanKnownPlaceholders(value: unknown, available: Set<string>, errors: ValidationIssue[], pathPrefix: string): void {
+  scanStrings(value, (text, path) => {
+    placeholderRe.lastIndex = 0;
+    for (const match of text.matchAll(placeholderRe)) {
+      const name = match[1];
+      if (!available.has(name)) {
+        const cleanPath = path.startsWith('$.') ? path.slice(2) : path;
+        addIssue(errors, 'error', 'PLACEHOLDER_UNKNOWN', `Placeholder [${name}] is not available in this XRC-137 step context. Declare it in payload, apiCalls.extractMap or contractReads.saveAs before using it.`, cleanPath === '$' ? pathPrefix : cleanPath);
+      }
+    }
+  }, pathPrefix);
+}
+
+function looksLikeWeakProseRule(value: string): boolean {
+  const text = value.trim();
+  if (!text) return false;
+  return !/[\[\]()!=<>+\-*/&|]/.test(text) && /\s/.test(text);
+}
+
+function validatePayloadSchema(rule: JsonMap, errors: ValidationIssue[]): Set<string> {
+  const available = new Set<string>();
   if (!isMap(rule.payload)) {
     addIssue(errors, 'error', 'PAYLOAD_NOT_OBJECT', 'XRC-137 payload must be an object input schema.', 'payload');
-    return;
+    return available;
   }
 
   for (const [field, spec] of Object.entries(rule.payload)) {
     const path = `payload.${field}`;
+    if (!identRe.test(field)) {
+      addIssue(errors, 'error', 'PAYLOAD_FIELD_NAME_INVALID', `Payload field ${field} must be an ASCII identifier.`, path);
+    }
+    available.add(field);
     if (!isMap(spec)) {
       addIssue(errors, 'error', 'PAYLOAD_FIELD_NOT_OBJECT', `Payload field ${field} must be an object schema.`, path);
       continue;
@@ -138,6 +179,8 @@ function validatePayloadSchema(rule: JsonMap, errors: ValidationIssue[]): void {
 
     if (typeof spec.type !== 'string' || spec.type.trim() === '') {
       addIssue(errors, 'error', 'PAYLOAD_FIELD_TYPE_MISSING', `Payload field ${field} requires a non-empty type.`, `${path}.type`);
+    } else if (!xrcTypes.has(spec.type)) {
+      addIssue(errors, 'error', 'PAYLOAD_FIELD_TYPE_INVALID', `Payload field ${field} requires a valid XRC type.`, `${path}.type`);
     }
 
     for (const key of Object.keys(spec)) {
@@ -146,13 +189,15 @@ function validatePayloadSchema(rule: JsonMap, errors: ValidationIssue[]): void {
       }
     }
   }
+  return available;
 }
 
-function validateApiCalls(rule: JsonMap, errors: ValidationIssue[], warnings: ValidationIssue[]): void {
-  if (rule.apiCalls === undefined) return;
+function validateApiCalls(rule: JsonMap, errors: ValidationIssue[], warnings: ValidationIssue[]): Set<string> {
+  const available = new Set<string>();
+  if (rule.apiCalls === undefined) return available;
   if (!Array.isArray(rule.apiCalls)) {
     addIssue(errors, 'error', 'APICALLS_NOT_ARRAY', 'apiCalls must be an array.', 'apiCalls');
-    return;
+    return available;
   }
 
   rule.apiCalls.forEach((call, index) => {
@@ -184,12 +229,16 @@ function validateApiCalls(rule: JsonMap, errors: ValidationIssue[], warnings: Va
       } else {
         for (const [alias, spec] of Object.entries(call.extractMap)) {
           const aliasPath = `${path}.extractMap.${alias}`;
+          if (!identRe.test(alias)) addIssue(errors, 'error', 'EXTRACTMAP_ALIAS_INVALID', `extractMap alias ${alias} must be an ASCII identifier.`, aliasPath);
+          available.add(alias);
           if (!isMap(spec)) {
             addIssue(errors, 'error', 'EXTRACTMAP_FIELD_NOT_OBJECT', `extractMap.${alias} must be a TypedValue object.`, aliasPath);
             continue;
           }
           if (typeof spec.type !== 'string' || spec.type.trim() === '') {
             addIssue(errors, 'error', 'EXTRACTMAP_TYPE_MISSING', `extractMap.${alias} requires type.`, `${aliasPath}.type`);
+          } else if (!xrcTypes.has(spec.type)) {
+            addIssue(errors, 'error', 'EXTRACTMAP_TYPE_INVALID', `extractMap.${alias} requires a valid XRC type.`, `${aliasPath}.type`);
           }
           if (!Object.prototype.hasOwnProperty.call(spec, 'value')) {
             addIssue(warnings, 'warning', 'EXTRACTMAP_VALUE_MISSING', `extractMap.${alias} usually requires value.`, `${aliasPath}.value`);
@@ -198,9 +247,34 @@ function validateApiCalls(rule: JsonMap, errors: ValidationIssue[], warnings: Va
       }
     }
   });
+  return available;
 }
 
-function validateRules(rule: JsonMap, errors: ValidationIssue[]): void {
+function validateContractReads(rule: JsonMap, errors: ValidationIssue[]): Set<string> {
+  const available = new Set<string>();
+  if (rule.contractReads === undefined) return available;
+  if (!Array.isArray(rule.contractReads)) {
+    addIssue(errors, 'error', 'CONTRACTREADS_NOT_ARRAY', 'contractReads must be an array.', 'contractReads');
+    return available;
+  }
+  rule.contractReads.forEach((read, index) => {
+    const path = `contractReads.${index}`;
+    if (!isMap(read)) {
+      addIssue(errors, 'error', 'CONTRACTREAD_NOT_OBJECT', `contractReads[${index}] must be an object.`, path);
+      return;
+    }
+    if (read.saveAs !== undefined && isMap(read.saveAs)) {
+      for (const [key, target] of Object.entries(read.saveAs)) {
+        if (!isMap(target)) continue;
+        if (typeof target.key === 'string' && identRe.test(target.key)) available.add(target.key);
+        else addIssue(errors, 'error', 'CONTRACTREAD_SAVE_TARGET_KEY_INVALID', `contractReads[${index}].saveAs.${key}.key must be an ASCII identifier.`, `${path}.saveAs.${key}.key`);
+      }
+    }
+  });
+  return available;
+}
+
+function validateRules(rule: JsonMap, errors: ValidationIssue[], warnings: ValidationIssue[], available: Set<string>): void {
   if (!Array.isArray(rule.rules)) {
     addIssue(errors, 'error', 'RULES_NOT_ARRAY', 'rules must be an array.', 'rules');
     return;
@@ -208,7 +282,11 @@ function validateRules(rule: JsonMap, errors: ValidationIssue[]): void {
 
   rule.rules.forEach((item, index) => {
     const path = `rules.${index}`;
-    if (typeof item === 'string') return;
+    if (typeof item === 'string') {
+      if (looksLikeWeakProseRule(item)) addIssue(warnings, 'warning', 'RULE_WEAK_PROSE', `rules[${index}] looks like prose, not an executable validation expression.`, path);
+      scanKnownPlaceholders(item, available, errors, path);
+      return;
+    }
     if (!isMap(item)) {
       addIssue(errors, 'error', 'RULE_INVALID', `rules[${index}] must be a string or an object.`, path);
       return;
@@ -221,11 +299,36 @@ function validateRules(rule: JsonMap, errors: ValidationIssue[]): void {
     }
     if (typeof item.expression !== 'string' || item.expression.trim() === '') {
       addIssue(errors, 'error', 'RULE_EXPRESSION_MISSING', 'Rule object requires a non-empty expression.', `${path}.expression`);
+    } else {
+      if (looksLikeWeakProseRule(item.expression)) addIssue(warnings, 'warning', 'RULE_WEAK_PROSE', `rules[${index}].expression looks like prose, not an executable validation expression.`, `${path}.expression`);
+      scanKnownPlaceholders(item.expression, available, errors, `${path}.expression`);
     }
     if (item.type !== undefined && !['validate', 'abortStep', 'cancelSession'].includes(String(item.type))) {
       addIssue(errors, 'error', 'RULE_TYPE_INVALID', 'Rule type must be validate, abortStep or cancelSession.', `${path}.type`);
     }
   });
+}
+
+function validateBranchPayload(rule: JsonMap, branchName: BranchName, available: Set<string>, errors: ValidationIssue[]): void {
+  const branch = rule[branchName];
+  if (!isMap(branch)) {
+    addIssue(errors, 'error', 'BRANCH_MISSING_OR_INVALID', `${branchName} must be an object.`, branchName);
+    return;
+  }
+  if (branch.payload !== undefined && !isMap(branch.payload)) {
+    addIssue(errors, 'error', 'BRANCH_PAYLOAD_NOT_OBJECT', `${branchName}.payload must be an object output payload.`, `${branchName}.payload`);
+    return;
+  }
+  if (isMap(branch.payload)) {
+    for (const [field, value] of Object.entries(branch.payload)) {
+      const path = `${branchName}.payload.${field}`;
+      if (!identRe.test(field)) addIssue(errors, 'error', 'BRANCH_PAYLOAD_FIELD_INVALID', `Branch payload field ${field} must be an ASCII identifier.`, path);
+      if (isMap(value) && Object.prototype.hasOwnProperty.call(value, 'type') && Object.keys(value).every((key) => ['type', 'default'].includes(key))) {
+        addIssue(errors, 'error', 'BRANCH_PAYLOAD_SCHEMA_INVALID', `${branchName}.payload.${field} is an output value, not an input schema.`, path);
+      }
+      scanKnownPlaceholders(value, available, errors, path);
+    }
+  }
 }
 
 export function validateXrc137Authoring(rule: unknown): ValidationResult {
@@ -237,20 +340,14 @@ export function validateXrc137Authoring(rule: unknown): ValidationResult {
     return { valid: false, errors, warnings };
   }
 
-  validatePayloadSchema(rule, errors);
-  validateApiCalls(rule, errors, warnings);
-  validateRules(rule, errors);
+  const available = validatePayloadSchema(rule, errors);
+  validateApiCalls(rule, errors, warnings).forEach((field) => available.add(field));
+  validateContractReads(rule, errors).forEach((field) => available.add(field));
+  validateRules(rule, errors, warnings, available);
   scanForbiddenPlaceholders(rule, errors);
 
   for (const branchName of ['onValid', 'onInvalid'] as const) {
-    const branch = rule[branchName];
-    if (!isMap(branch)) {
-      addIssue(errors, 'error', 'BRANCH_MISSING_OR_INVALID', `${branchName} must be an object.`, branchName);
-      continue;
-    }
-    if (branch.payload !== undefined && !isMap(branch.payload)) {
-      addIssue(errors, 'error', 'BRANCH_PAYLOAD_NOT_OBJECT', `${branchName}.payload must be an object output payload.`, `${branchName}.payload`);
-    }
+    validateBranchPayload(rule, branchName, available, errors);
   }
 
   return { valid: errors.length === 0, errors, warnings };

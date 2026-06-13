@@ -1,21 +1,4 @@
-export const xrc137Reference = `# XRC-137 Reference
-
-XRC-137 describes a rule definition for an XDaLa validation step.
-
-Core sections:
-- payload: typed input fields expected by the step
-- apiCalls: optional HTTP calls with extracted values
-- contractReads: optional EVM contract reads with saved outputs
-- rules: validation expressions
-- onValid: branch executed when rules pass
-- onInvalid: branch executed when rules fail
-
-Typed values use { type, value, default? }. The legacy key expr is treated like value by the engine.
-
-A branch may define payload output, execution, waitSec, encryptLogs, logExpireDays, grants and wakeUps.
-
-This reference is read-only guidance for agents. Generated drafts must still be checked with xgr_estimateRuleGas and a dedicated validator before production use.
-`;
+export { xrc137Reference } from './docs.js';
 
 export const xrc137Schema = {
   type: 'object',
@@ -156,7 +139,7 @@ export const xrc137Examples = {
         name: 'vat_check',
         method: 'GET',
         urlTemplate: 'https://example.invalid/vat/[vatId]',
-        contentType: 'application/json',
+        contentType: 'json',
         timeoutMs: 5000,
         extractMap: {
           vatValid: { type: 'bool', value: 'resp.valid', default: false, save: true }
@@ -166,5 +149,19 @@ export const xrc137Examples = {
     rules: [{ expression: '[vatValid] == true', type: 'validate' }],
     onValid: { payload: { status: 'valid_vat' }, encryptLogs: true, logExpireDays: 365 },
     onInvalid: { payload: { status: 'invalid_vat' }, encryptLogs: true, logExpireDays: 30 }
+  },
+  literalOutput: {
+    payload: {},
+    rules: ['true'],
+    onValid: {
+      payload: {
+        result: 1
+      }
+    },
+    onInvalid: {
+      payload: {
+        error: 'not_completed'
+      }
+    }
   }
 } as const;

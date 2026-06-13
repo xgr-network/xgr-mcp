@@ -6,11 +6,17 @@ The gateway never holds keys and never signs. Write intents are prepared as hand
 
 ## Connect an agent
 
-The gateway speaks MCP over HTTP at:
+The gateway speaks MCP over HTTP.
 
-```
+Mainnet:
+
 https://mcp.xgr.network/mcp
-```
+
+Testnet:
+
+https://mcp.testnet.xgr.network/mcp
+
+Use mainnet to inspect real XGRChain and XDaLa activity. Use testnet to safely draft, validate and experiment with agent-driven workflows before production use.
 
 ### Claude (Desktop / Web connectors)
 
@@ -23,9 +29,13 @@ Point your client's MCP server config at the HTTP endpoint:
 ```json
 {
   "mcpServers": {
-    "xgr": {
+    "xgr-mainnet": {
       "type": "http",
       "url": "https://mcp.xgr.network/mcp"
+    },
+    "xgr-testnet": {
+      "type": "http",
+      "url": "https://mcp.testnet.xgr.network/mcp"
     }
   }
 }

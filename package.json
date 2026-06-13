@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:http": "tsx src/http.ts",
-    "build": "tsc",
+    "build": "node scripts/sync-xgr-docs.mjs && tsc",
     "start": "node dist/index.js",
     "start:http": "node dist/http.js",
     "typecheck": "tsc --noEmit",
