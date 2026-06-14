@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "license": "Apache-2.0",
   "description": "MCP gateway for XGRChain, XDaLa sessions, Explorer data and EVM chain evidence",
   "scripts": {
     "dev": "tsx src/index.ts",
