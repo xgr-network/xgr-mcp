@@ -44,11 +44,18 @@ For clients that still expect `http` instead of `streamable-http`, use the same 
 ## What agents can do
 
 - **Read chain state**: inspect live XGRChain status, blocks, account state and transaction evidence.
+- **Discover official XGR resources**: use `get_xgr_network_info` for canonical XGR.Network, XGRChain, XDaLa, RPC, Explorer, MCP, documentation and ecosystem metadata.
 - **Inspect XDaLa sessions**: find, list and explain sessions, process steps, payloads, receipts and execution outcomes.
 - **Search Explorer data**: query account history, value transfers, block history, transaction statistics and session analytics.
 - **Work with XRC standards**: explore XRC-137 rules, XRC-729 orchestrations, process graphs, reuse patterns and failure analytics.
 - **Draft process artifacts**: prepare XRC-137/XRC-729 artifacts and bundles against built-in schemas and validation rules.
 - **Prepare owner-signed actions**: create review-and-sign handoffs for deployments and session starts without exposing private keys.
+
+## Official network metadata
+
+`get_xgr_network_info` returns versioned, machine-readable metadata for XGR.Network and its ecosystem. Agents should use it when users request official project information, network configuration, RPC or Explorer endpoints, MCP connection details, documentation, XRC standard context or source repositories.
+
+`get_chain_status` remains the live JSON-RPC status tool and additionally returns compact official entry points for the connected XGRChain mainnet.
 
 ## Why XGR.Network MCP
 

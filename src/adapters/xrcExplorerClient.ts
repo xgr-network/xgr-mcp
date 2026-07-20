@@ -42,6 +42,13 @@ export interface XrcContractQuery {
   limit?: number;
 }
 
+export interface XrcExecutorContractQuery {
+  page?: number;
+  limit?: number;
+  status?: 'all' | 'active' | 'inactive' | 'rpc_failed';
+  includeInactive?: boolean;
+}
+
 export interface XrcEventQuery {
   owner?: string;
   contract?: string;
@@ -61,6 +68,17 @@ export const xrcExplorerClient = {
 
   listAddressContracts(address: string, query: Omit<XrcContractQuery, 'owner'>): Promise<unknown> {
     return getExplorerJson(`/address/${encodeURIComponent(address)}/xrc/contracts`, query);
+  },
+
+  listXrc729ContractsByExecutor(executor: string, query: XrcExecutorContractQuery): Promise<unknown> {
+    return getExplorerJson(`/address/${encodeURIComponent(executor)}/xrc/executors`, {
+      view: 'relations',
+      type: 'xrc729',
+      status: query.status ?? 'active',
+      includeInactive: query.includeInactive ?? false,
+      page: query.page,
+      limit: query.limit
+    });
   },
 
   getContract(address: string): Promise<unknown> {
