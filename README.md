@@ -113,3 +113,13 @@ Required runtime configuration is documented in [Setup & Configuration](https://
 ## License
 
 Licensed under the [Apache License 2.0](./LICENSE).
+
+## Mainnet XGR purchase tools
+
+The optional purchase tools are **mainnet-only**, disabled by default, and are never registered by testnet. Enable them only with `XGR_PURCHASE_TOOLS_ENABLED=true`, `XGR_PURCHASE_NETWORK=mainnet`, a valid HTTPS API URL (or local HTTP), and a maximum at or below `249.99` EUR.
+
+`quote_xgr_purchase` is optional planning only. `create_xgr_purchase_order` creates the real order in one call to `POST /api/orders`; the website confirmation modal is not a separate API phase. The backend is authoritative for the final price, crypto amount, custody wallet, payment reference, and reservation. The MCP holds no private keys and does not pay; an external wallet agent can execute the returned exact payment instruction.
+
+The **249.99 EUR** maximum is an MCP policy for autonomous orders. Separately, the XGR_Web backend requires a complete billing address from a newly calculated `net_eur >= 250`; it is not a backend order maximum. A backend repricing/address error is returned without retrying the order.
+
+Purchase tools distinguish fixed-XGR orders from conservative USDC/USDT budget orders. The live backend POST determines the binding market price and exact `amount_crypto`; EUR is only a policy/reference value. A budget order whose exact returned amount exceeds its cap is not paid and its existing reservation expires normally.

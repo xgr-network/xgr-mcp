@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { rpcCall } from '../adapters/rpcClient.js';
+import { getPurchaseConfig } from '../shared/purchaseConfig.js';
 
 const XGR_MAINNET_CHAIN_ID = 1643;
 const XGR_MAINNET_CHAIN_ID_HEX = '0x66b';
@@ -87,7 +88,10 @@ export function registerChainTools(server: McpServer): void {
       description: 'Use this when the user asks what XGR.Network, XGRChain or XDaLa is, or requests official XGR URLs, chain metadata, RPC, Explorer, MCP, testnet faucet, documentation, XRC standards, source repositories or ecosystem entry points. Returns canonical project metadata and links; use get_chain_status for live chain state.',
       inputSchema: {}
     },
-    async () => textJson(XGR_NETWORK_INFO)
+    async () => {
+      const purchase = getPurchaseConfig();
+      return textJson({ ...XGR_NETWORK_INFO, purchase: purchase.enabled ? { supported: true, network: 'mainnet', tools_enabled: true, autonomous_max_eur: purchase.maxEur, billing_address_threshold_eur: 250, payment_execution: 'external' } : { supported: false, tools_enabled: false } });
+    }
   );
 
   server.registerTool(

@@ -12,6 +12,8 @@ import { registerXgrTools } from './xgrTools.js';
 import { registerXrcTools } from './xrcTools.js';
 import { registerXrcExecutorTools } from './xrcExecutorTools.js';
 import { writeToolUsage } from '../shared/usageLog.js';
+import { getPurchaseConfig } from '../shared/purchaseConfig.js';
+import { registerPurchaseTools } from './purchaseTools.js';
 
 type ToolOptions = Record<string, unknown> & {
   description?: string;
@@ -236,4 +238,6 @@ export function registerTools(server: McpServer): void {
   registerOperationTools(server);
   registerDiagramTools(server);
   registerKnowledgeTools(server);
+  const purchaseConfig = getPurchaseConfig();
+  if (purchaseConfig.enabled) registerPurchaseTools(server, purchaseConfig);
 }
