@@ -41,7 +41,7 @@ Use mainnet to inspect real XGRChain and XDaLa activity. Use testnet to safely d
 
 For clients that still expect `http` instead of `streamable-http`, use the same endpoint URL and select the HTTP/remote MCP transport offered by your client.
 
-## What agents can do
+## Tools
 
 - **Read chain state**: inspect live XGRChain status, blocks, account state and transaction evidence.
 - **Discover official XGR resources**: use `get_xgr_network_info` for canonical XGR.Network, XGRChain, XDaLa, RPC, Explorer, MCP, documentation and ecosystem metadata.
