@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { env } from './config/env.js';
+import { getStarterGasConfig } from './shared/starterGasConfig.js';
 import { registerTools } from './tools/index.js';
+import { registerStarterGasTools } from './tools/starterGasTools.js';
 
 type DiscoveryHandlerRegistrar = {
   setResourceRequestHandlers: () => void;
@@ -20,6 +22,8 @@ export function createMcpServer(): McpServer {
   });
 
   registerTools(server);
+  const starterGasConfig = getStarterGasConfig();
+  if (starterGasConfig.enabled) registerStarterGasTools(server, starterGasConfig);
   registerDiscoveryHandlers(server);
   return server;
 }

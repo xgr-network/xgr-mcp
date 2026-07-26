@@ -1,19 +1,25 @@
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { env } from './config/env.js';
-import { createMcpServer } from './server.js';
 import { registerOperationRoutes } from './operations/routes.js';
 import { publicHandoffErrorHandler } from './operations/publicHandoffSecurity.js';
+import { createMcpServer } from './server.js';
+import { getStarterGasConfig } from './shared/starterGasConfig.js';
 
 const app = express();
 
 app.disable('x-powered-by');
 
 app.get('/health', (_req, res) => {
+  const starterGas = getStarterGasConfig();
   res.json({
     ok: true,
     name: env.serverName,
-    readOnly: env.readOnly
+    readOnly: env.readOnly,
+    userOperationsReadOnly: env.readOnly,
+    starterGasEnabled: starterGas.enabled,
+    serverSigningScope: starterGas.enabled ? 'dedicated_starter_gas_service_wallet_only' : 'none',
+    userOrThirdPartyPrivateKeysAccepted: false
   });
 });
 
@@ -40,7 +46,7 @@ app.get('/mcp', (_req, res) => {
 });
 
 app.delete('/mcp', (_req, res) => {
-  res.status(405).json({ error: 'Method not allowed. This read-only gateway uses stateless POST requests.' });
+  res.status(405).json({ error: 'Method not allowed. This stateless gateway uses POST requests.' });
 });
 
 app.listen(env.httpPort, env.httpHost, () => {
