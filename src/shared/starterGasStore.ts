@@ -90,6 +90,14 @@ export class StarterGasStore {
       );
       CREATE INDEX IF NOT EXISTS idx_starter_gas_status_created
         ON starter_gas_grants(status, created_at);
+
+      CREATE TABLE IF NOT EXISTS starter_gas_ip_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT NOT NULL,
+        requested_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_starter_gas_ip_requested
+        ON starter_gas_ip_requests(ip, requested_at);
     `);
     this.importLegacyJson(legacyStorePath);
   }
@@ -101,6 +109,32 @@ export class StarterGasStore {
   get(address: string): StarterGasGrant | undefined {
     const row = this.db.prepare('SELECT * FROM starter_gas_grants WHERE address = ?').get(address) as Row | undefined;
     return mapRow(row);
+  }
+
+  consumeIpRequest(ip: string, maxPerHour: number, maxPerDay: number): void {
+    const transaction = this.db.transaction(() => {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const hourStart = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+      const dayStart = `${nowIso.slice(0, 10)}T00:00:00.000Z`;
+      const retentionStart = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+
+      this.db.prepare('DELETE FROM starter_gas_ip_requests WHERE requested_at < ?').run(retentionStart);
+
+      const hourly = Number((this.db.prepare(
+        'SELECT COUNT(*) AS count FROM starter_gas_ip_requests WHERE ip = ? AND requested_at >= ?'
+      ).get(ip, hourStart) as { count: number }).count);
+      const daily = Number((this.db.prepare(
+        'SELECT COUNT(*) AS count FROM starter_gas_ip_requests WHERE ip = ? AND requested_at >= ?'
+      ).get(ip, dayStart) as { count: number }).count);
+
+      if (hourly >= maxPerHour) throw new Error('The hourly starter-gas request limit for this client IP has been reached.');
+      if (daily >= maxPerDay) throw new Error('The daily starter-gas request limit for this client IP has been reached.');
+
+      this.db.prepare('INSERT INTO starter_gas_ip_requests(ip, requested_at) VALUES (?, ?)').run(ip, nowIso);
+    });
+
+    transaction.immediate();
   }
 
   reserve(input: ReserveGrantInput): StarterGasGrant {

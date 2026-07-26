@@ -4,6 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { env } from '../config/env.js';
 import type { StarterGasConfig } from '../shared/starterGasConfig.js';
 import { XGR_STARTER_GAS_GRANT_XGR } from '../shared/starterGasConfig.js';
+import { getMcpRequestContext } from '../shared/requestContext.js';
 import { StarterGasStore } from '../shared/starterGasStore.js';
 
 const result = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] });
@@ -11,7 +12,8 @@ const result = (data: unknown) => ({ content: [{ type: 'text' as const, text: JS
 export function registerStarterGasTools(server: McpServer, config: StarterGasConfig): void {
   if (
     !config.enabled || !config.network || !config.chainId || !config.privateKey || !config.dbPath ||
-    !config.maxHourlyGrants || !config.maxDailyGrants || !config.maxAttemptsPerAddress ||
+    !config.maxHourlyGrants || !config.maxDailyGrants || !config.maxRequestsPerIpHour ||
+    !config.maxRequestsPerIpDay || !config.maxAttemptsPerAddress ||
     !config.reservationTimeoutSeconds || config.maxRecipientBalanceXgr === undefined
   ) return;
 
@@ -28,6 +30,8 @@ export function registerStarterGasTools(server: McpServer, config: StarterGasCon
     one_grant_per_address: true,
     max_hourly_grants: config.maxHourlyGrants,
     max_daily_grants: config.maxDailyGrants,
+    max_requests_per_client_ip_hour: config.maxRequestsPerIpHour,
+    max_requests_per_client_ip_day: config.maxRequestsPerIpDay,
     maximum_attempts_per_address: config.maxAttemptsPerAddress,
     execution: 'direct_onchain_transfer_from_dedicated_service_wallet',
     custody_model: 'no_user_or_third_party_private_keys',
@@ -37,7 +41,7 @@ export function registerStarterGasTools(server: McpServer, config: StarterGasCon
 
   server.registerTool('request_xgr_starter_gas', {
     title: 'Request XGR starter gas',
-    description: 'Use this tool when a user or agent needs native XGR to pay transaction fees on the configured XGR network. It sends one fixed 1 XGR grant from a dedicated server-controlled funding wallet to an eligible low-balance EVM address. Use it before deployments, session starts, contract calls or other on-chain actions when the address lacks gas. One confirmed grant per address; no repayment is required. The service never requests, receives or stores user or third-party private keys and cannot sign on behalf of users.',
+    description: 'Use this tool when a user or agent needs native XGR to pay transaction fees on the configured XGR network. It sends one fixed 1 XGR grant from a dedicated server-controlled funding wallet to an eligible low-balance EVM address. Use it before deployments, session starts, contract calls or other on-chain actions when the address lacks gas. One confirmed grant per address; client-IP request limits apply; no repayment is required. The service never requests, receives or stores user or third-party private keys and cannot sign on behalf of users.',
     inputSchema: {
       address: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
       purpose: z.string().trim().min(1).max(120).optional()
@@ -52,6 +56,11 @@ export function registerStarterGasTools(server: McpServer, config: StarterGasCon
     let confirmedFailure = false;
 
     try {
+      const clientIp = getMcpRequestContext().clientIp;
+      if (clientIp) {
+        store.consumeIpRequest(clientIp, config.maxRequestsPerIpHour!, config.maxRequestsPerIpDay!);
+      }
+
       const remoteChainIdHex = await provider.send('eth_chainId', []);
       const remoteChainId = Number(BigInt(String(remoteChainIdHex)));
       if (remoteChainId !== config.chainId) throw new Error(`RPC chain id ${remoteChainId} does not match configured ${config.network} chain id ${config.chainId}.`);

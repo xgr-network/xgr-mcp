@@ -16,8 +16,12 @@ let server: ReturnType<typeof createServer>;
 let createSessionStartHandoff: typeof import('../src/operations/sessionStartStore.js').createSessionStartHandoff;
 let recordSessionStartResult: typeof import('../src/operations/sessionStartStore.js').recordSessionStartResult;
 let getSessionStartHandoff: typeof import('../src/operations/sessionStartStore.js').getSessionStartHandoff;
+let validateSessionStartResult: typeof import('../src/operations/sessionStartStore.js').validateSessionStartResult;
 let registerOperationRoutes: typeof import('../src/operations/routes.js').registerOperationRoutes;
 let publicHandoffErrorHandler: typeof import('../src/operations/publicHandoffSecurity.js').publicHandoffErrorHandler;
+
+type SessionStartHandoff = Awaited<ReturnType<typeof createSessionStartHandoff>>;
+type ResultEntry = Record<string, unknown>;
 
 function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -53,6 +57,52 @@ function makeRequest(chain?: Record<string, unknown>, starterAddress?: string) {
   };
 }
 
+function makeQueueRequest() {
+  const request = makeRequest();
+  return {
+    ...request,
+    mode: 'queue',
+    sessions: [request.sessions[0], { ...request.sessions[0] }]
+  };
+}
+
+function callbackOriginalRequest(handoff: SessionStartHandoff): Record<string, unknown> {
+  const chain = handoff.request.chain;
+  return {
+    type: handoff.request.type,
+    version: handoff.request.version,
+    handle: handoff.handle,
+    ...(handoff.request.summary ? { summary: handoff.request.summary } : {}),
+    ...(handoff.request.mode ? { mode: handoff.request.mode } : {}),
+    sessions: handoff.request.sessions.map(({ __uid: _uid, ...session }) => session),
+    ...(chain ? {
+      chain: {
+        ...(typeof chain.network === 'string' ? { network: chain.network } : {}),
+        ...(typeof chain.requiredChainIdHex === 'string' ? { requiredChainIdHex: chain.requiredChainIdHex } : {}),
+        ...(typeof chain.requiredChainIdDec === 'string' ? { requiredChainIdDec: chain.requiredChainIdDec } : {})
+      }
+    } : {})
+  };
+}
+
+function terminalResult(
+  handoff: SessionStartHandoff,
+  status: 'completed' | 'partial' | 'failed' | 'cancelled',
+  results: ResultEntry[]
+) {
+  const validated = validateSessionStartResult(handoff.handle, {
+    handle: handoff.handle,
+    type: 'xdala_session_start_result',
+    status,
+    completedAt: new Date().toISOString(),
+    inputType: handoff.request.sessions.length === 1 ? 'singleSession' : 'sessionQueue',
+    originalRequest: callbackOriginalRequest(handoff),
+    results
+  });
+  if (!validated.ok) throw new Error(`test produced invalid terminal result: ${validated.error}`);
+  return validated.result;
+}
+
 before(async () => {
   storeDir = await mkdtemp(join(tmpdir(), 'xgr-session-start-chain-'));
   server = createServer(async (req, res) => {
@@ -69,7 +119,7 @@ before(async () => {
   process.env.XGR_RPC_URL = rpcUrl;
   process.env.MCP_SESSION_START_STORE_DIR = storeDir;
   process.env.MCP_OPERATION_STORE_DIR = join(storeDir, 'operations');
-  ({ createSessionStartHandoff, recordSessionStartResult, getSessionStartHandoff } = await import('../src/operations/sessionStartStore.js'));
+  ({ createSessionStartHandoff, recordSessionStartResult, getSessionStartHandoff, validateSessionStartResult } = await import('../src/operations/sessionStartStore.js'));
   ({ registerOperationRoutes } = await import('../src/operations/routes.js'));
   ({ publicHandoffErrorHandler } = await import('../src/operations/publicHandoffSecurity.js'));
 });
@@ -144,15 +194,13 @@ test('sessionOwnership uses terminal result owner after Workbench start', async 
     request: makeRequest()
   });
 
-  const updated = await recordSessionStartResult(handoff.handle, {
-    handle: handoff.handle,
-    type: 'xdala_session_start_result',
-    status: 'completed',
-    completedAt: new Date().toISOString(),
-    receivedAt: new Date().toISOString(),
-    inputType: 'workbench',
-    results: [{ ok: true, sessionId: 'session-1', owner: '0x3333333333333333333333333333333333333333' }]
-  });
+  const updated = await recordSessionStartResult(handoff.handle, terminalResult(handoff, 'completed', [{
+    ok: true,
+    index: 0,
+    status: 'started',
+    sessionId: 'session-1',
+    owner: '0x3333333333333333333333333333333333333333'
+  }]));
 
   assert(updated && !('error' in updated));
   assert.equal(updated.sessionOwnership.status, 'actual_recorded');
@@ -188,45 +236,58 @@ test('session-start resultSummary reflects terminal completed, partial, failed, 
     const handoff = await createSessionStartHandoff({
       source: 'direct',
       network: 'devnet',
-      request: makeRequest()
+      request: status === 'partial' ? makeQueueRequest() : makeRequest()
     });
-    const hasOk = status === 'completed' || status === 'partial';
-    const results = hasOk
-      ? [
-          {
-            ok: true,
-            sessionId: `session-${status}`,
-            pid: `pid-${status}`,
-            owner: '0x3333333333333333333333333333333333333333',
-            orchestration: ORCHESTRATION,
-            ostcId: 'ostc-test',
-            stepId: 'start'
-          },
-          ...(status === 'partial' ? [{ ok: false, error: 'manual failure', ostcId: 'ostc-test', stepId: 'start' }] : [])
-        ]
-      : status === 'failed'
-        ? [{ ok: false, error: 'manual failure', ostcId: 'ostc-test', stepId: 'start' }]
-        : [];
 
-    const updated = await recordSessionStartResult(handoff.handle, {
-      handle: handoff.handle,
-      type: 'xdala_session_start_result',
-      status,
-      completedAt: new Date().toISOString(),
-      receivedAt: new Date().toISOString(),
-      inputType: 'workbench',
-      results
-    });
+    const results: ResultEntry[] = status === 'completed'
+      ? [{
+          ok: true,
+          index: 0,
+          status: 'started',
+          sessionId: 'session-completed',
+          owner: '0x3333333333333333333333333333333333333333'
+        }]
+      : status === 'partial'
+        ? [{
+            ok: true,
+            index: 0,
+            status: 'started',
+            sessionId: 'session-partial',
+            owner: '0x3333333333333333333333333333333333333333'
+          }, {
+            ok: false,
+            index: 1,
+            status: 'failed',
+            stage: 'start',
+            error: 'manual failure'
+          }]
+        : status === 'failed'
+          ? [{
+              ok: false,
+              index: 0,
+              status: 'failed',
+              stage: 'start',
+              error: 'manual failure'
+            }]
+          : [{
+              ok: false,
+              index: 0,
+              status: 'cancelled',
+              stage: 'cancelled',
+              error: 'cancelled by user'
+            }];
+
+    const updated = await recordSessionStartResult(handoff.handle, terminalResult(handoff, status, results));
 
     assert(updated && !('error' in updated));
     assert.equal(updated.resultSummary.status, status);
     assert.equal(updated.resultSummary.total, results.length);
-    assert.equal(updated.resultSummary.ok, results.filter((result) => result.ok === true).length);
-    assert.equal(updated.resultSummary.failed, results.filter((result) => result.ok === false).length);
-    assert.equal(updated.resultSummary.evidenceReady, hasOk);
-    if (hasOk) {
+    assert.equal(updated.resultSummary.ok, results.filter((entry) => entry.ok === true).length);
+    assert.equal(updated.resultSummary.failed, results.filter((entry) => entry.ok === false).length);
+    assert.equal(updated.resultSummary.evidenceReady, status === 'completed' || status === 'partial');
+    assert.deepEqual(updated.resultSummary.pids, []);
+    if (status === 'completed' || status === 'partial') {
       assert.deepEqual(updated.resultSummary.sessionIds, [`session-${status}`]);
-      assert.deepEqual(updated.resultSummary.pids, [`pid-${status}`]);
       assert.deepEqual(updated.resultSummary.owners, ['0x3333333333333333333333333333333333333333']);
       assert.deepEqual(updated.resultSummary.orchestrations, [ORCHESTRATION]);
     }
@@ -272,8 +333,15 @@ test('public session-start routes omit status callback and accept terminal resul
         type: 'xdala_session_start_result',
         status: 'completed',
         completedAt: new Date().toISOString(),
-        inputType: 'workbench',
-        results: [{ ok: true, sessionId: 'session-route', owner: '0x3333333333333333333333333333333333333333' }]
+        inputType: 'singleSession',
+        originalRequest: callbackOriginalRequest(handoff),
+        results: [{
+          ok: true,
+          index: 0,
+          status: 'started',
+          sessionId: 'session-route',
+          owner: '0x3333333333333333333333333333333333333333'
+        }]
       })
     });
     assert.equal(resultResponse.status, 200);

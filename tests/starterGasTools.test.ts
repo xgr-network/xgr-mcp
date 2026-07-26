@@ -46,10 +46,13 @@ test('starter gas validates network, private key and bounded grant policy', () =
   assert.throws(() => getStarterGasConfig({ XGR_STARTER_GAS_ENABLED: 'true', XGR_STARTER_GAS_NETWORK: 'mainnet' }), /PRIVATE_KEY/);
   assert.throws(() => getStarterGasConfig({ XGR_STARTER_GAS_ENABLED: 'true', XGR_STARTER_GAS_NETWORK: 'mainnet', XGR_STARTER_GAS_PRIVATE_KEY: privateKey, XGR_STARTER_GAS_MAX_RECIPIENT_BALANCE_XGR: '1' }), /lower than the fixed 1 XGR grant/);
   assert.throws(() => getStarterGasConfig({ XGR_STARTER_GAS_ENABLED: 'true', XGR_STARTER_GAS_NETWORK: 'mainnet', XGR_STARTER_GAS_PRIVATE_KEY: privateKey, XGR_STARTER_GAS_MAX_HOURLY_GRANTS: '101', XGR_STARTER_GAS_MAX_DAILY_GRANTS: '100' }), /must not exceed/);
+  assert.throws(() => getStarterGasConfig({ XGR_STARTER_GAS_ENABLED: 'true', XGR_STARTER_GAS_NETWORK: 'mainnet', XGR_STARTER_GAS_PRIVATE_KEY: privateKey, XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_HOUR: '21', XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_DAY: '20' }), /must not exceed/);
   const config = enabled();
   assert.equal(config.maxRecipientBalanceXgr, 0.1);
   assert.equal(config.maxHourlyGrants, 20);
   assert.equal(config.maxDailyGrants, 100);
+  assert.equal(config.maxRequestsPerIpHour, 5);
+  assert.equal(config.maxRequestsPerIpDay, 20);
   assert.equal(config.maxAttemptsPerAddress, 2);
   assert.equal(config.dbPath, './data/starter-gas-grants-devnet.sqlite');
   assert.equal(XGR_STARTER_GAS_GRANT_XGR, 1);
@@ -73,6 +76,8 @@ test('options expose a fixed one-step 1 XGR devnet grant', async () => {
   assert.equal(options.network, 'devnet');
   assert.equal(options.chain_id, 1887);
   assert.equal(options.grant_amount_xgr, 1);
+  assert.equal(options.max_requests_per_client_ip_hour, 5);
+  assert.equal(options.max_requests_per_client_ip_day, 20);
   assert.equal(options.execution, 'direct_onchain_transfer_from_dedicated_service_wallet');
   assert.equal(options.custody_model, 'no_user_or_third_party_private_keys');
   assert.equal(options.repayment_required, false);
@@ -102,6 +107,21 @@ test('SQLite store reserves atomically, tracks lifecycle and permits bounded ret
     store.markConfirmed(address);
     assert.equal(store.get(address)?.status, 'confirmed');
     assert.throws(() => store.reserve(policy), /already received/);
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SQLite store applies client IP request limits independently', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'xgr-starter-gas-ip-'));
+  const store = new StarterGasStore(join(dir, 'grants.sqlite'));
+
+  try {
+    store.consumeIpRequest('203.0.113.10', 2, 3);
+    store.consumeIpRequest('203.0.113.10', 2, 3);
+    assert.throws(() => store.consumeIpRequest('203.0.113.10', 2, 3), /hourly starter-gas request limit/);
+    assert.doesNotThrow(() => store.consumeIpRequest('203.0.113.11', 2, 3));
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });

@@ -5,6 +5,7 @@ import { registerOperationRoutes } from './operations/routes.js';
 import { publicHandoffErrorHandler } from './operations/publicHandoffSecurity.js';
 import { createMcpServer } from './server.js';
 import { getStarterGasConfig } from './shared/starterGasConfig.js';
+import { resolveTrustedClientIp, runWithMcpRequestContext } from './shared/requestContext.js';
 
 const app = express();
 
@@ -37,8 +38,12 @@ app.post('/mcp', async (req, res) => {
     void server.close();
   });
 
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+  await runWithMcpRequestContext({
+    clientIp: resolveTrustedClientIp(req.headers, req.socket.remoteAddress)
+  }, async () => {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  });
 });
 
 app.get('/mcp', (_req, res) => {

@@ -10,6 +10,8 @@ export type StarterGasConfig = {
   maxRecipientBalanceXgr?: number;
   maxHourlyGrants?: number;
   maxDailyGrants?: number;
+  maxRequestsPerIpHour?: number;
+  maxRequestsPerIpDay?: number;
   maxAttemptsPerAddress?: number;
   reservationTimeoutSeconds?: number;
   dbPath?: string;
@@ -75,6 +77,10 @@ export function getStarterGasConfig(env: NodeJS.ProcessEnv = process.env): Start
   const maxDailyGrants = positiveInteger(env.XGR_STARTER_GAS_MAX_DAILY_GRANTS, 100, 'XGR_STARTER_GAS_MAX_DAILY_GRANTS');
   if (maxHourlyGrants > maxDailyGrants) throw new Error('XGR_STARTER_GAS_MAX_HOURLY_GRANTS must not exceed XGR_STARTER_GAS_MAX_DAILY_GRANTS.');
 
+  const maxRequestsPerIpHour = positiveInteger(env.XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_HOUR, 5, 'XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_HOUR');
+  const maxRequestsPerIpDay = positiveInteger(env.XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_DAY, 20, 'XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_DAY');
+  if (maxRequestsPerIpHour > maxRequestsPerIpDay) throw new Error('XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_HOUR must not exceed XGR_STARTER_GAS_MAX_REQUESTS_PER_IP_DAY.');
+
   const paths = sqlitePath(network, env);
 
   return {
@@ -85,6 +91,8 @@ export function getStarterGasConfig(env: NodeJS.ProcessEnv = process.env): Start
     maxRecipientBalanceXgr,
     maxHourlyGrants,
     maxDailyGrants,
+    maxRequestsPerIpHour,
+    maxRequestsPerIpDay,
     maxAttemptsPerAddress: positiveInteger(env.XGR_STARTER_GAS_MAX_ATTEMPTS_PER_ADDRESS, 2, 'XGR_STARTER_GAS_MAX_ATTEMPTS_PER_ADDRESS'),
     reservationTimeoutSeconds: positiveInteger(env.XGR_STARTER_GAS_RESERVATION_TIMEOUT_SECONDS, 600, 'XGR_STARTER_GAS_RESERVATION_TIMEOUT_SECONDS'),
     ...paths
