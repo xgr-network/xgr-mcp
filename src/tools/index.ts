@@ -5,8 +5,10 @@ import { registerDiagramTools } from './diagramTools.js';
 import { registerKnowledgeTools } from './knowledgeTools.js';
 import { registerOperationTools } from './operationTools.js';
 import { registerReceiptTools } from './receiptTools.js';
+import { registerRelationGraphTools } from './relationGraphTools.js';
 import { registerSessionTools } from './sessionTools.js';
 import { registerSessionResolverTools } from './sessionResolverTools.js';
+import { registerSessionPayloadHistoryTools } from './sessionPayloadHistoryTools.js';
 import { registerTransactionTools } from './transactionTools.js';
 import { registerXgrTools } from './xgrTools.js';
 import { registerXrcTools } from './xrcTools.js';
@@ -47,14 +49,14 @@ const PARAMETER_DESCRIPTIONS: Record<string, string> = {
   sessionId: 'XDaLa session identifier used to query runtime or explorer data.',
   pid: 'XDaLa process id within a session tree.',
   rootPid: 'Root XDaLa process id for the session tree.',
-  parentPid: 'Parent process id within an XDaLa session tree.',
+  parentPid: 'Parent process id within the XDaLa session tree.',
   step: 'Human-readable XDaLa step label or step identifier.',
   stepId: 'Canonical XDaLa step id used by Workbench/session-start requests.',
   ostcId: 'Orchestration step contract id for the XDaLa workflow.',
   ostcHash: 'Hash or identifier of the orchestration step contract artifact.',
   orchestration: 'Address or identifier of the deployed XDaLa orchestration contract.',
   bundle: 'Canonical XDaLa bundle JSON object to validate, store or hand off.',
-  bundleDeployHandle: 'Opaque handle returned by the XDaLa bundle deploy handoff flow.',
+  bundleDeployHandle: 'Opaque handle returned by a previous XDaLa bundle deploy handoff flow.',
   handle: 'Opaque handoff handle returned by a previous XDaLa MCP tool.',
   operationId: 'Identifier of a stored offchain operation handoff.',
   secret: 'Secret token required to read or cancel protected handoff state.',
@@ -229,8 +231,10 @@ export function registerTools(server: McpServer): void {
   instrumentRegisterTool(server);
   registerChainTools(server);
   registerTransactionTools(server);
+  registerRelationGraphTools(server);
   registerSessionTools(server);
   registerSessionResolverTools(server);
+  registerSessionPayloadHistoryTools(server);
   registerReceiptTools(server);
   registerXgrTools(server);
   registerXrcTools(server);
