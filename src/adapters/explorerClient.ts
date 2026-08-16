@@ -52,5 +52,9 @@ export const explorerClient = {
 
   getNativeXgrValueFlow(txHash: string, params: Record<string, string | number | boolean | null | undefined> = {}): Promise<unknown> {
     return getJson(apiUrl(`/v2/value-flow/transactions/${encodeURIComponent(txHash)}${queryString(params)}`));
+  },
+
+  searchXgrAnalysisTransactions(params: Record<string, string | number | boolean | null | undefined> = {}): Promise<unknown> {
+    return getJson(apiUrl(`/v2/analysis/transactions${queryString(params)}`));
   }
 };

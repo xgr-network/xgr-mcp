@@ -35,6 +35,35 @@ function graphParams(input: {
 }
 
 export function registerRelationGraphTools(server: McpServer): void {
+  server.registerTool('search_xgr_transactions', {
+    title: 'Search native XGR transactions for flow analysis',
+    description: 'Find indexed native-XGR transactions using time, value and address filters before choosing a transaction for Relation Graph or Value Flow analysis. Typical use: all native transfers in the last 24 hours above a given XGR/wei amount. Results are read-only and cursor-paginated for latest/oldest sorting.',
+    inputSchema: {
+      fromTimestamp: timestamp.describe('Optional inclusive Unix-seconds lower time bound.'),
+      toTimestamp: timestamp.describe('Optional inclusive Unix-seconds upper time bound.'),
+      minValueWei: z.string().regex(/^\d+$/).optional().describe('Minimum native XGR transfer value in wei.'),
+      maxValueWei: z.string().regex(/^\d+$/).optional().describe('Optional maximum native XGR transfer value in wei.'),
+      fromAddress: address.optional().describe('Optional exact sender address.'),
+      toAddress: address.optional().describe('Optional exact recipient address.'),
+      address: address.optional().describe('Optional address that may appear on either side of the transfer.'),
+      sort: z.enum(['latest', 'oldest', 'largest']).optional().describe('Sort order. largest is intentionally a bounded single-page picker view.'),
+      cursor: z.string().regex(/^\d+:\d+$/).optional().describe('Cursor returned by a previous latest/oldest search.'),
+      limit: z.number().int().min(1).max(100).optional(),
+    }
+  }, async (input) => textJson(await explorerClient.searchXgrAnalysisTransactions({
+    from_timestamp: input.fromTimestamp,
+    to_timestamp: input.toTimestamp,
+    min_value_wei: input.minValueWei ?? '0',
+    max_value_wei: input.maxValueWei,
+    from_address: input.fromAddress,
+    to_address: input.toAddress,
+    address: input.address,
+    sort: input.sort ?? 'latest',
+    cursor: input.cursor,
+    limit: input.limit ?? 50,
+    native_only: true,
+  })));
+
   server.registerTool('get_address_relation_graph', {
     title: 'Get XGR address relation graph',
     description: 'Read-only bounded graph of indexed native XGR transfers around an address. Returns aggregated on-chain relations, verified Explorer labels, depth and truncation metadata. A relation proves only that transactions occurred between addresses; it does not imply common ownership or identity.',
