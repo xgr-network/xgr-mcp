@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.xgr-network/xgr-mcp",
+  "name": "io.github.xgr-network/xdala-workflow-builder",
   "title": "XGR MCP Gateway",
   "description": "Public Streamable HTTP MCP gateway for XGRChain, XDaLa sessions, Explorer data and XGR standards.",
   "version": "0.1.0",
