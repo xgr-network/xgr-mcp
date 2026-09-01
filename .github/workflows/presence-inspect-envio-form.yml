@@ -1,0 +1,41 @@
+name: Presence Inspect Envio Form
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-envio-form.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-envio]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public Envio request form source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://envio.dev/request_network' -o /tmp/page.html
+          echo 'FORM_TAGS_BEGIN'
+          grep -ioE '<form[^>]*>|action="[^"]+"|method="[^"]+"' /tmp/page.html | head -100 || true
+          echo 'FORM_TAGS_END'
+          echo 'ENDPOINT_CANDIDATES_BEGIN'
+          grep -oE 'https?://[^"<> ]+|/api/[A-Za-z0-9_/?&=.%:-]+' /tmp/page.html | grep -Ei 'api|form|submit|request|hubspot|formspree|formspark|web3forms' | sort -u | head -200 || true
+          echo 'ENDPOINT_CANDIDATES_END'
+          echo 'SCRIPT_SCAN_BEGIN'
+          grep -oE 'src="[^"]+\.js[^" ]*"' /tmp/page.html | cut -d'"' -f2 | sort -u > /tmp/scripts.txt || true
+          while IFS= read -r src; do
+            [ -n "$src" ] || continue
+            case "$src" in
+              http*) url="$src" ;;
+              //*) url="https:$src" ;;
+              /*) url="https://envio.dev$src" ;;
+              *) url="https://envio.dev/$src" ;;
+            esac
+            curl -fsSL "$url" -o /tmp/script.js || continue
+            if grep -Eqi 'Network Support Request Form|Expected usage|co-fund|request_network|formspree|formspark|web3forms|hubspot|/api/' /tmp/script.js; then
+              echo "SCRIPT=$url"
+              grep -Eo '.{0,180}(Network Support Request Form|Expected usage|co-fund|request_network|formspree|formspark|web3forms|/api/[A-Za-z0-9_/?&=.%:-]+).{0,260}' /tmp/script.js | head -40 || true
+            fi
+          done < /tmp/scripts.txt
+          echo 'SCRIPT_SCAN_END'
