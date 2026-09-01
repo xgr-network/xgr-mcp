@@ -1,0 +1,27 @@
+name: Presence Submit Envio
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-submit-envio.yml'
+
+jobs:
+  submit:
+    if: contains(github.event.head_commit.message, '[presence-submit-envio]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit XGRChain network support request exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload='{"role":"Network","name":"Oliver Böhm","email":"info@xgr.network","handle":"N/A","orgName":"XGR.Network GmbH","networkName":"XGRChain Mainnet","networkType":"Mainnet","expectedUsage":"No quantitative usage forecast is available. This request is for general XGRChain ecosystem and developer support.","timeline":"No fixed deployment deadline; requesting general first-class network support.","cofundWillingness":"No","supportLevel":"","whyImportant":"XGRChain is the public EVM-compatible execution and settlement layer of XGR.Network. First-class Envio support would improve developer access to indexed XGRChain data.","additionalInfo":"Chain ID: 1643. Public RPC: https://rpc.xgr.network. Explorer: https://explorer.xgr.network. Official website: https://xgr.network. Documentation: https://xgr.network/docs/."}'
+          status=$(curl --silent --show-error --output /tmp/body.txt --write-out '%{http_code}' --request POST 'https://envio.dev/api/requestNetworkSupport' --header 'Content-Type: application/json' --data "$payload")
+          echo "HTTP_STATUS=$status"
+          echo 'RESPONSE_BODY_BEGIN'
+          cat /tmp/body.txt
+          echo
+          echo 'RESPONSE_BODY_END'
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            exit 1
+          fi
