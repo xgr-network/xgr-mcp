@@ -1,0 +1,46 @@
+name: Presence Inspect BLAZED Network Request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-blazed-20260901.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-blazed]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current BLAZED request implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://blazed.sh/networks' -o /tmp/page.html
+          echo 'INLINE_BEGIN'
+          grep -inE 'Request Network Support|network.?support|contact|form|api/' /tmp/page.html | head -120 || true
+          echo 'INLINE_END'
+          grep -oE 'src="[^"]+\.js[^" ]*"' /tmp/page.html | cut -d'"' -f2 | sort -u > /tmp/scripts.txt || true
+          while IFS= read -r src; do
+            [ -n "$src" ] || continue
+            case "$src" in
+              http*) url="$src" ;;
+              //*) url="https:$src" ;;
+              /*) url="https://blazed.sh$src" ;;
+              *) url="https://blazed.sh/$src" ;;
+            esac
+            curl -fsSL "$url" -o /tmp/script.js || continue
+            if grep -Eqi 'Request Network Support|network.?support|/api/|formspree|formspark|web3forms|contact' /tmp/script.js; then
+              echo "SCRIPT=$url"
+              python3 - <<'PY'
+          s=open('/tmp/script.js',encoding='utf-8',errors='ignore').read()
+          for needle in ['Request Network Support','network support','/api/','formspree','web3forms','contact']:
+              start=0
+              for _ in range(10):
+                  i=s.lower().find(needle.lower(),start)
+                  if i<0: break
+                  print('\nNEEDLE',needle,'INDEX',i)
+                  print(s[max(0,i-1800):i+3200])
+                  start=i+len(needle)
+          PY
+            fi
+          done < /tmp/scripts.txt
