@@ -1,0 +1,46 @@
+name: Presence Inspect IndexMCP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-indexmcp-20260901.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-indexmcp]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current IndexMCP submit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://indexmcp.co/submit' -o /tmp/page.html
+          echo 'FORM_BEGIN'
+          grep -ioE '<form[^>]*>|name="[^"]+"|action="[^"]+"|method="[^"]+"' /tmp/page.html | head -120 || true
+          echo 'FORM_END'
+          grep -oE 'src="[^"]+\.js[^" ]*"' /tmp/page.html | cut -d'"' -f2 | sort -u > /tmp/scripts.txt || true
+          while IFS= read -r src; do
+            [ -n "$src" ] || continue
+            case "$src" in
+              http*) url="$src" ;;
+              //*) url="https:$src" ;;
+              /*) url="https://indexmcp.co$src" ;;
+              *) url="https://indexmcp.co/$src" ;;
+            esac
+            curl -fsSL "$url" -o /tmp/script.js || continue
+            if grep -q '/api/submit' /tmp/script.js; then
+              echo "SCRIPT=$url"
+              python3 - <<'PY'
+          s=open('/tmp/script.js',encoding='utf-8',errors='ignore').read()
+          needle='/api/submit'
+          start=0
+          for _ in range(6):
+              i=s.find(needle,start)
+              if i<0: break
+              print(s[max(0,i-1800):i+2600])
+              print('\n---MATCH---\n')
+              start=i+len(needle)
+          PY
+            fi
+          done < /tmp/scripts.txt
