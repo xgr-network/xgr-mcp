@@ -1,0 +1,52 @@
+name: Presence Inspect BlockPI Ticket
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-blockpi-20260901.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-blockpi]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current BlockPI ticket implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://blockpi.io/?contact=ticket' -o /tmp/page.html
+          echo 'FORM_TAGS_BEGIN'
+          grep -ioE '<form[^>]*>|name="[^"]+"|action="[^"]+"|method="[^"]+"' /tmp/page.html | head -120 || true
+          echo 'FORM_TAGS_END'
+          grep -oE 'src="[^"]+\.js[^" ]*"' /tmp/page.html | cut -d'"' -f2 | sort -u > /tmp/scripts.txt || true
+          while IFS= read -r src; do
+            [ -n "$src" ] || continue
+            case "$src" in
+              http*) url="$src" ;;
+              //*) url="https:$src" ;;
+              /*) url="https://blockpi.io$src" ;;
+              *) url="https://blockpi.io/$src" ;;
+            esac
+            curl -fsSL "$url" -o /tmp/script.js || continue
+            if grep -Eqi 'contact=ticket|support ticket|ticket|captcha|turnstile|recaptcha|api/' /tmp/script.js; then
+              echo "SCRIPT=$url"
+              python3 - <<'PY'
+          import re
+          s=open('/tmp/script.js',encoding='utf-8',errors='ignore').read()
+          needles=['contact=ticket','support ticket','ticket','recaptcha','turnstile']
+          seen=set()
+          for needle in needles:
+              start=0
+              for _ in range(8):
+                  i=s.lower().find(needle.lower(),start)
+                  if i<0: break
+                  key=(max(0,i-1500),min(len(s),i+2500))
+                  if key not in seen:
+                      print('\nNEEDLE',needle,'INDEX',i)
+                      print(s[key[0]:key[1]])
+                      seen.add(key)
+                  start=i+len(needle)
+          PY
+            fi
+          done < /tmp/scripts.txt
