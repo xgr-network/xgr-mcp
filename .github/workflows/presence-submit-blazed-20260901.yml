@@ -1,0 +1,40 @@
+name: Presence Submit BLAZED Network Request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-submit-blazed-20260901.yml'
+
+jobs:
+  submit:
+    if: contains(github.event.head_commit.message, '[presence-submit-blazed]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit XGRChain network request exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --max-redirs 0 \
+            --dump-header /tmp/headers.txt \
+            --output /tmp/body.txt \
+            --write-out 'HTTP_STATUS=%{http_code}\n' \
+            --request POST 'https://blazed.sh/' \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'form-name=waitlist' \
+            --data-urlencode 'email=info@xgr.network' \
+            --data-urlencode 'chain=XGRChain Mainnet (Chain ID 1643)' \
+            > /tmp/status.txt || true
+          cat /tmp/status.txt
+          echo 'HEADERS_BEGIN'
+          cat /tmp/headers.txt
+          echo 'HEADERS_END'
+          echo 'BODY_BEGIN'
+          head -c 5000 /tmp/body.txt || true
+          echo
+          echo 'BODY_END'
+          status=$(sed -n 's/^HTTP_STATUS=//p' /tmp/status.txt | tail -1)
+          case "$status" in
+            200|201|202|204|301|302|303) exit 0 ;;
+            *) exit 1 ;;
+          esac
