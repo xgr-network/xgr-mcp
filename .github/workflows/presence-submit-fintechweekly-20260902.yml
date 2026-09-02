@@ -1,0 +1,67 @@
+name: Presence Submit FinTech Weekly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-submit-fintechweekly-20260902.yml'
+
+jobs:
+  submit:
+    if: contains(github.event.head_commit.message, '[presence-submit-fintechweekly]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit XGR.Network company exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGE='https://www.fintechweekly.com/fintech-companies'
+          curl -fsSL -c /tmp/cookies.txt "$PAGE" -o /tmp/page.html
+          TOKEN=$(python3 - <<'PY'
+          import re, html
+          s=open('/tmp/page.html',encoding='utf-8',errors='ignore').read()
+          m=re.search(r'name="authenticity_token" value="([^"]+)"',s)
+          if not m: raise SystemExit('NO_TOKEN')
+          print(html.unescape(m.group(1)))
+          PY
+          )
+          DESC='XGR.Network GmbH develops public blockchain and process infrastructure. XGRChain is a public EVM-compatible execution and settlement layer, while XDaLa provides process, validation and orchestration capabilities for auditable workflows involving rules, smart contracts, external data, APIs and human approvals.'
+          curl --silent --show-error --location \
+            -b /tmp/cookies.txt -c /tmp/cookies.txt \
+            --dump-header /tmp/headers.txt \
+            --output /tmp/body.html \
+            --write-out 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\n' \
+            --request POST "$PAGE" \
+            --data-urlencode 'utf8=✓' \
+            --data-urlencode "authenticity_token=$TOKEN" \
+            --data-urlencode 'fintech_company[name]=XGR.Network GmbH' \
+            --data-urlencode 'fintech_company[url]=https://xgr.network' \
+            --data-urlencode 'fintech_company[stringy_category_old]=Blockchain' \
+            --data-urlencode "fintech_company[description]=$DESC" \
+            --data-urlencode 'fintech_company[year]=' \
+            --data-urlencode 'fintech_company[country]=Germany' \
+            --data-urlencode 'fintech_company[employees_count]=' \
+            --data-urlencode 'fintech_company[headquarters]=Limbach-Oberfrohna' \
+            --data-urlencode 'fintech_company[present]=1' \
+            --data-urlencode 'commit=Submit Company' \
+            > /tmp/status.txt
+          cat /tmp/status.txt
+          echo 'HEADERS_BEGIN'
+          cat /tmp/headers.txt
+          echo 'HEADERS_END'
+          echo 'CONFIRMATION_BEGIN'
+          python3 - <<'PY'
+          import re
+          s=open('/tmp/body.html',encoding='utf-8',errors='ignore').read()
+          title=re.search(r'<title[^>]*>(.*?)</title>',s,re.I|re.S)
+          print('TITLE=', re.sub('<[^>]+>',' ',title.group(1)).strip() if title else '')
+          text=re.sub(r'<script.*?</script>|<style.*?</style>',' ',s,flags=re.I|re.S)
+          text=re.sub(r'<[^>]+>',' ',text)
+          text=re.sub(r'\s+',' ',text)
+          for needle in ['thank','submitted','submission','received','review','success','added','company']:
+              i=text.lower().find(needle)
+              if i>=0:
+                  print(text[max(0,i-500):i+1400])
+                  print('---')
+          PY
+          echo 'CONFIRMATION_END'
