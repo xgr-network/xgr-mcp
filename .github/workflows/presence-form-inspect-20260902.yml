@@ -7,29 +7,37 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect Private Markets submit implementation
+      - name: Inspect InfoWebWorld free listing implementation
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import urllib.request, urllib.parse, re
-          base='https://directory.private-markets.com/submit'
-          req=urllib.request.Request(base,headers={'User-Agent':'Mozilla/5.0 XGR-Presence/1.0'})
-          with urllib.request.urlopen(req,timeout=30) as r:
-              html=r.read().decode('utf-8','replace')
-          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)',html,re.I)
-          print('SCRIPT_COUNT',len(srcs))
-          for s in srcs:
-              u=urllib.parse.urljoin(base,s)
-              try:
-                  with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=30) as r:
-                      js=r.read().decode('utf-8','replace')
-                  if any(k in js for k in ['companyName','contactEmail','company_url','Submit a company']):
-                      print('MATCH_SCRIPT',u)
-                      for key in ['companyName','contactEmail','company_url']:
-                          pos=js.find(key)
-                          if pos>=0:
-                              print('KEY',key,'CONTEXT',js[max(0,pos-1800):pos+3200])
-              except Exception as e:
-                  print('SCRIPT_ERROR',u,type(e).__name__,str(e))
+          urls=['https://www.infowebworld.com/business/plans','https://www.infowebworld.com/dashboard']
+          for base in urls:
+            req=urllib.request.Request(base,headers={'User-Agent':'Mozilla/5.0 XGR-Presence/1.0'})
+            try:
+              with urllib.request.urlopen(req,timeout=30) as r:
+                html=r.read().decode('utf-8','replace'); final=r.geturl(); print('PAGE',base,'STATUS',r.status,'FINAL',final)
+              forms=re.findall(r'<form\b[^>]*>.*?</form>',html,re.I|re.S)
+              print('FORMS',len(forms))
+              for i,f in enumerate(forms):
+                head=re.search(r'<form\b([^>]*)>',f,re.I|re.S)
+                print('FORM',i,head.group(1)[:1000] if head else '')
+                for m in re.finditer(r'<(?:input|select|textarea|button)\b([^>]*)>',f,re.I|re.S): print('CONTROL',re.sub(r'\s+',' ',m.group(1))[:1000])
+              srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)',html,re.I)
+              print('SCRIPTS',len(srcs))
+              for s in srcs:
+                u=urllib.parse.urljoin(final,s)
+                try:
+                  with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=30) as rr: js=rr.read().decode('utf-8','replace')
+                  low=js.lower()
+                  if any(k in low for k in ['get started free','freeplan','free plan','signup','register','business/plans','/api/']):
+                    print('MATCH_SCRIPT',u)
+                    for key in ['Get Started Free','freePlan','signup','register','/api/']:
+                      pos=js.lower().find(key.lower())
+                      if pos>=0: print('KEY',key,'CONTEXT',js[max(0,pos-2500):pos+5000])
+                except Exception as e: print('SCRIPT_ERROR',u,type(e).__name__,str(e))
+            except Exception as e: print('PAGE_ERROR',base,type(e).__name__,str(e))
+            print('---')
           PY
