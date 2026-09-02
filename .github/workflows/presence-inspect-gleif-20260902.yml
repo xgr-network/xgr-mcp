@@ -1,0 +1,42 @@
+name: Presence Inspect GLEIF XGR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-gleif-20260902.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-gleif]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch official GLEIF LEI record
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -H 'Accept: application/vnd.api+json' 'https://api.gleif.org/api/v1/lei-records/391200JHCS27EPI8VE61' -o /tmp/lei.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/lei.json'))
+          d=x.get('data',{})
+          a=d.get('attributes',{})
+          e=a.get('entity',{})
+          r=a.get('registration',{})
+          out={
+            'id':d.get('id'),
+            'lei':a.get('lei'),
+            'legalName':e.get('legalName',{}).get('name'),
+            'legalAddress':e.get('legalAddress'),
+            'headquartersAddress':e.get('headquartersAddress'),
+            'registeredAs':e.get('registeredAs'),
+            'jurisdiction':e.get('jurisdiction'),
+            'category':e.get('category'),
+            'entityStatus':e.get('status'),
+            'registrationStatus':r.get('status'),
+            'initialRegistrationDate':r.get('initialRegistrationDate'),
+            'lastUpdateDate':r.get('lastUpdateDate'),
+            'nextRenewalDate':r.get('nextRenewalDate'),
+          }
+          print(json.dumps(out, ensure_ascii=False, indent=2))
+          PY
