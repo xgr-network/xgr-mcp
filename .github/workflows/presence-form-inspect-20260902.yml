@@ -1,0 +1,75 @@
+name: Presence form inspect 2026-09-02
+on:
+  push:
+    paths:
+      - '.github/workflows/presence-form-inspect-20260902.yml'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect first-party forms
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html.parser
+          import urllib.request
+          import urllib.parse
+
+          urls = [
+              'https://directory.private-markets.com/submit',
+              'https://www.online-handelsregister.de/mein-unternehmen/27050025/firmenergaenzungen',
+          ]
+
+          class P(html.parser.HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.form = None
+                  self.forms = []
+                  self.select = None
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == 'form':
+                      self.form = {'action': a.get('action',''), 'method': a.get('method','get').lower(), 'fields': [], 'buttons': []}
+                      self.forms.append(self.form)
+                  elif self.form is not None and tag == 'input':
+                      self.form['fields'].append(('input', a.get('name',''), a.get('type','text'), a.get('value',''), a.get('required') is not None))
+                  elif self.form is not None and tag == 'textarea':
+                      self.form['fields'].append(('textarea', a.get('name',''), '', '', a.get('required') is not None))
+                  elif self.form is not None and tag == 'select':
+                      self.select = {'name': a.get('name',''), 'required': a.get('required') is not None, 'options': []}
+                      self.form['fields'].append(('select', self.select['name'], '', '', self.select['required'], self.select['options']))
+                  elif self.form is not None and tag == 'option' and self.select is not None:
+                      self.select['options'].append((a.get('value',''), a.get('selected') is not None))
+                  elif self.form is not None and tag == 'button':
+                      self.form['buttons'].append((a.get('type','submit'), a.get('name',''), a.get('value','')))
+              def handle_endtag(self, tag):
+                  if tag == 'select': self.select = None
+                  if tag == 'form': self.form = None
+
+          for url in urls:
+              req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0 XGR-Presence/1.0'})
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      body = r.read().decode('utf-8','replace')
+                      final = r.geturl()
+                      status = r.status
+                      ctype = r.headers.get('content-type','')
+                  p = P(); p.feed(body)
+                  print('URL', url)
+                  print('FINAL', final)
+                  print('STATUS', status)
+                  print('CTYPE', ctype)
+                  print('FORMS', len(p.forms))
+                  for i,f in enumerate(p.forms):
+                      print('FORM', i, 'METHOD', f['method'], 'ACTION', urllib.parse.urljoin(final, f['action']))
+                      for field in f['fields']:
+                          print('FIELD', repr(field))
+                      for b in f['buttons']:
+                          print('BUTTON', repr(b))
+                  print('---')
+              except Exception as e:
+                  print('URL', url)
+                  print('ERROR', type(e).__name__, str(e))
+                  print('---')
+          PY
