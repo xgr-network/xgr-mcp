@@ -7,78 +7,45 @@ jobs:
   execute:
     runs-on: ubuntu-latest
     steps:
-      - name: Submit qualified first-party forms exactly once
+      - name: Submit Private Markets entry exactly once
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import urllib.request, urllib.parse, http.cookiejar, re
-
-          UA={'User-Agent':'Mozilla/5.0 XGR-Presence/1.0'}
-
-          # 1) Private Markets Technology Directory: current HTML form is GET and has a blank company_url honeypot-like field.
-          base='https://directory.private-markets.com/submit'
-          params={
+          import urllib.request, urllib.error, json
+          endpoint='https://directory.private-markets.com/api/submit'
+          payload={
+            'company_url':'',
             'companyName':'XGR.Network GmbH',
             'website':'https://xgr.network',
             'categories':'AI & Workflow Automation',
             'description':'XGR.Network develops XGRChain, a public EVM-compatible blockchain execution and settlement layer, and XDaLa, a process validation and orchestration layer for auditable workflows using rules, external data, smart contracts and human approvals.',
             'region':'Germany',
             'contactName':'Oliver Böhm',
-            'contactEmail':'info@xgr.network',
+            'contactEmail':'info@xgr.network'
           }
-          url=base+'?'+urllib.parse.urlencode(params)
-          req=urllib.request.Request(url,headers=UA)
+          data=json.dumps(payload,ensure_ascii=False).encode('utf-8')
+          req=urllib.request.Request(endpoint,data=data,method='POST',headers={
+            'User-Agent':'Mozilla/5.0 XGR-Presence/1.0',
+            'Content-Type':'application/json',
+            'Accept':'application/json,text/plain,*/*',
+            'Origin':'https://directory.private-markets.com',
+            'Referer':'https://directory.private-markets.com/submit'
+          })
           try:
             with urllib.request.urlopen(req,timeout=30) as r:
               body=r.read().decode('utf-8','replace')
-              print('PRIVATE_STATUS',r.status)
-              print('PRIVATE_FINAL',r.geturl())
-              print('PRIVATE_TITLE',re.search(r'<title[^>]*>(.*?)</title>',body,re.I|re.S).group(1).strip() if re.search(r'<title[^>]*>(.*?)</title>',body,re.I|re.S) else '')
-              text=re.sub(r'<[^>]+>',' ',body)
-              text=re.sub(r'\s+',' ',text)
-              for marker in ['thank','submitted','received','review','success','added','submission']:
-                if marker in text.lower(): print('PRIVATE_MARKER',marker)
-              print('PRIVATE_TEXT',text[:2500])
+              print('PRIVATE_SUBMIT_STATUS',r.status)
+              print('PRIVATE_SUBMIT_FINAL',r.geturl())
+              print('PRIVATE_SUBMIT_CONTENT_TYPE',r.headers.get('content-type',''))
+              for h in ['x-request-id','x-vercel-id','location']:
+                if r.headers.get(h): print('PRIVATE_HEADER',h,r.headers.get(h))
+              print('PRIVATE_SUBMIT_BODY',body[:3000])
           except urllib.error.HTTPError as e:
             body=e.read().decode('utf-8','replace')
-            print('PRIVATE_HTTP_ERROR',e.code)
-            print('PRIVATE_ERROR_BODY',re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',body))[:1800])
-
-          print('---')
-
-          # 2) Online-Handelsregister: fetch fresh CSRF/cookies and submit only canonical contact/homepage enrichment.
-          form='https://www.online-handelsregister.de/mein-unternehmen/27050025/firmenergaenzungen'
-          action='https://www.online-handelsregister.de/firmenergaenzung/save/27050025'
-          cj=http.cookiejar.CookieJar()
-          opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-          with opener.open(urllib.request.Request(form,headers=UA),timeout=30) as r:
-            html=r.read().decode('utf-8','replace')
-          m=re.search(r'name=["\']_token["\'][^>]*value=["\']([^"\']+)',html,re.I)
-          if not m:
-            print('OHR_NO_CSRF')
-          else:
-            data=urllib.parse.urlencode({
-              '_token':m.group(1),
-              'customer_name':'Oliver Böhm',
-              'customer_email':'info@xgr.network',
-              'email':'info@xgr.network',
-              'web':'https://xgr.network',
-              'reason':'Ergänzung der offiziellen Kontaktadresse und Homepage durch den Geschäftsführer.',
-              'email2':'',
-            }).encode()
-            req=urllib.request.Request(action,data=data,headers={**UA,'Content-Type':'application/x-www-form-urlencoded','Referer':form})
-            try:
-              with opener.open(req,timeout=30) as r:
-                body=r.read().decode('utf-8','replace')
-                text=re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',body))
-                print('OHR_STATUS',r.status)
-                print('OHR_FINAL',r.geturl())
-                for marker in ['danke','erfolgreich','gespeichert','prüfen','eingegangen','ergänzung']:
-                  if marker in text.lower(): print('OHR_MARKER',marker)
-                print('OHR_TEXT',text[:2500])
-            except urllib.error.HTTPError as e:
-              body=e.read().decode('utf-8','replace')
-              print('OHR_HTTP_ERROR',e.code)
-              print('OHR_ERROR_BODY',re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',body))[:1800])
+            print('PRIVATE_SUBMIT_HTTP_ERROR',e.code)
+            print('PRIVATE_SUBMIT_CONTENT_TYPE',e.headers.get('content-type',''))
+            for h in ['x-request-id','x-vercel-id','location']:
+              if e.headers.get(h): print('PRIVATE_HEADER',h,e.headers.get(h))
+            print('PRIVATE_SUBMIT_ERROR_BODY',body[:3000])
           PY
