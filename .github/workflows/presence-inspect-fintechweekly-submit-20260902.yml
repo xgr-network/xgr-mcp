@@ -1,0 +1,59 @@
+name: Presence Inspect FinTech Weekly Submit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/presence-inspect-fintechweekly-submit-20260902.yml'
+
+jobs:
+  inspect:
+    if: contains(github.event.head_commit.message, '[presence-inspect-fintechweekly]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect current company submission implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL 'https://www.fintechweekly.com/fintech-companies' -o /tmp/page.html
+          echo 'FORM_TAGS_BEGIN'
+          grep -ioE '<form[^>]*>|name="[^"]+"|action="[^"]+"|method="[^"]+"' /tmp/page.html | head -250 || true
+          echo 'FORM_TAGS_END'
+          echo 'SUBMIT_CONTEXT_BEGIN'
+          python3 - <<'PY'
+          s=open('/tmp/page.html',encoding='utf-8',errors='ignore').read()
+          for needle in ['Submit Your Company','submitCompany','company_name','companyName','/api/','formspree','web3forms','hubspot']:
+              start=0
+              for _ in range(12):
+                  i=s.lower().find(needle.lower(),start)
+                  if i<0: break
+                  print('\nNEEDLE',needle,'INDEX',i)
+                  print(s[max(0,i-2500):i+5500])
+                  start=i+len(needle)
+          PY
+          echo 'SUBMIT_CONTEXT_END'
+          grep -oE 'src="[^"]+\.js[^" ]*"' /tmp/page.html | cut -d'"' -f2 | sort -u > /tmp/scripts.txt || true
+          while IFS= read -r src; do
+            [ -n "$src" ] || continue
+            case "$src" in
+              http*) url="$src" ;;
+              //*) url="https:$src" ;;
+              /*) url="https://www.fintechweekly.com$src" ;;
+              *) url="https://www.fintechweekly.com/$src" ;;
+            esac
+            curl -fsSL "$url" -o /tmp/script.js || continue
+            if grep -Eqi 'Submit Your Company|companyName|company_name|/api/|formspree|web3forms|hubspot' /tmp/script.js; then
+              echo "SCRIPT=$url"
+              python3 - <<'PY'
+          s=open('/tmp/script.js',encoding='utf-8',errors='ignore').read()
+          for needle in ['Submit Your Company','companyName','company_name','/api/','formspree','web3forms','hubspot']:
+              start=0
+              for _ in range(10):
+                  i=s.lower().find(needle.lower(),start)
+                  if i<0: break
+                  print('\nNEEDLE',needle,'INDEX',i)
+                  print(s[max(0,i-2200):i+4200])
+                  start=i+len(needle)
+          PY
+            fi
+          done < /tmp/scripts.txt
