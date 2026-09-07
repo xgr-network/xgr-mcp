@@ -3,7 +3,7 @@
   "name": "io.github.xgr-network/xdala-workflow-builder",
   "title": "XGR MCP Gateway",
   "description": "Public Streamable HTTP MCP gateway for XGRChain, XDaLa sessions, Explorer data and XGR standards.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "remotes": [
     {
       "type": "streamable-http",
