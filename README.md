@@ -4,7 +4,7 @@
 
 The gateway is designed for agent-assisted workflow creation: agents can inspect live chain evidence, reason over XDaLa process state, draft XRC artifacts and prepare handoffs that a user reviews and signs locally.
 
-The gateway never requests, receives, stores or controls user or third-party private keys and cannot sign on behalf of users. User write intents are prepared as handoffs and signed locally. An optional starter-gas service may use a dedicated server-controlled funding key solely to send fixed XGR gas grants from the service wallet.
+The gateway never requests, receives, stores or controls user or third-party private keys and cannot sign on behalf of users. User write intents are prepared as handoffs and signed locally. Separately, an explicitly enabled dedicated server-side operator wallet may sign bounded XGR-owned operational transactions such as deployments and contract calls; its key is supplied only through the server process environment and is never accepted from an MCP caller. The optional starter-gas service remains a separate narrow service-wallet capability.
 
 ## Public MCP endpoints
 
@@ -50,7 +50,7 @@ For clients that still expect `http` instead of `streamable-http`, use the same 
 - **Work with XRC standards**: explore XRC-137 rules, XRC-729 orchestrations, process graphs, reuse patterns and failure analytics.
 - **Draft process artifacts**: prepare XRC-137/XRC-729 artifacts and bundles against built-in schemas and validation rules.
 - **Prepare owner-signed actions**: create review-and-sign handoffs for deployments and session starts without exposing private keys.
-- **Request starter gas where enabled**: fund an eligible low-balance address with one fixed 1 XGR grant before deployment, session start, contract calls or other on-chain actions.
+- **Execute XGR operator transactions where enabled**: use a dedicated low-balance server-owned wallet for bounded deployments, contract calls and native XGR transfers without accepting caller-supplied keys.\n- **Request starter gas where enabled**: fund an eligible low-balance address with one fixed 1 XGR grant before deployment, session start, contract calls or other on-chain actions.
 
 ## Official network metadata
 
@@ -100,7 +100,7 @@ Required runtime configuration is documented in [Setup & Configuration](https://
 
 - The gateway never requests, receives, stores or controls user or third-party private keys.
 - User transactions are prepared as handoffs and signed locally by the user or the user's custody setup.
-- The optional starter-gas service is a narrow exception: it signs only transfers from a dedicated server-controlled funding wallet and cannot sign on behalf of users.
+- The optional operator signer is an explicit server-owned exception for XGR operational transactions. It uses one dedicated low-balance wallet, enforces chain/value/gas/calldata limits, and never accepts a private key from a caller.\n- The optional starter-gas service is a separate narrow exception: it signs only transfers from a dedicated server-controlled funding wallet and cannot sign on behalf of users.
 - Starter-gas grants are fixed at 1 XGR, limited by recipient balance, one confirmed grant per address, hourly and daily caps, and a bounded retry policy.
 - Starter-gas grant state is stored atomically in SQLite with `reserved`, `broadcast`, `confirmed` and `failed` states.
 - Production user signing remains under the control of the user's wallet or custody setup.
@@ -131,3 +131,22 @@ Purchase tools distinguish fixed-XGR orders from conservative USDC/USDT budget o
 Where enabled, `get_xgr_starter_gas_options` exposes the current fixed grant and eligibility policy. `request_xgr_starter_gas` sends one fixed 1 XGR grant from a dedicated service wallet to an eligible low-balance EVM address. Agents should use it before deployments, session starts, contract calls or other on-chain actions when the target address lacks native XGR for gas.
 
 The service does not request an address-ownership proof and does not use proof-of-work. Abuse is bounded through one confirmed grant per address, an hourly cap, a daily cap, recipient-balance eligibility, a low-balance service wallet and a limited number of retries after pre-broadcast failures.
+
+
+## Dedicated operator signer
+
+The optional operator signer is disabled by default. When enabled it registers `get_xgr_operator_wallet_status` and `send_xgr_operator_transaction`. The latter can submit native XGR transfers, arbitrary EVM contract calls and contract-creation bytecode from one dedicated XGR-owned operator wallet.
+
+Configure only through the server environment:
+
+```env
+XGR_OPERATOR_SIGNER_ENABLED=true
+XGR_OPERATOR_SIGNER_NETWORK=mainnet
+XGR_OPERATOR_SIGNER_CHAIN_ID=1643
+XGR_OPERATOR_SIGNER_PRIVATE_KEY=0x...
+XGR_OPERATOR_SIGNER_MAX_VALUE_XGR=5
+XGR_OPERATOR_SIGNER_MAX_GAS_LIMIT=15000000
+XGR_OPERATOR_SIGNER_MAX_DATA_BYTES=262144
+```
+
+Never use a treasury, validator, exchange, user or third-party key. `MCP_READONLY=true` may remain enabled because it continues to describe normal user-controlled operations; the operator signer is an independently gated server-owned exception.
