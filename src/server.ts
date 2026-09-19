@@ -1,7 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { env } from './config/env.js';
+import { getOperatorSignerConfig } from './shared/operatorSignerConfig.js';
 import { getStarterGasConfig } from './shared/starterGasConfig.js';
 import { registerTools } from './tools/index.js';
+import { registerOperatorSignerTools } from './tools/operatorSignerTools.js';
 import { registerStarterGasTools } from './tools/starterGasTools.js';
 
 type DiscoveryHandlerRegistrar = {
@@ -24,6 +26,8 @@ export function createMcpServer(): McpServer {
   registerTools(server);
   const starterGasConfig = getStarterGasConfig();
   if (starterGasConfig.enabled) registerStarterGasTools(server, starterGasConfig);
+  const operatorSignerConfig = getOperatorSignerConfig();
+  if (operatorSignerConfig.enabled) registerOperatorSignerTools(server, operatorSignerConfig);
   registerDiscoveryHandlers(server);
   return server;
 }
