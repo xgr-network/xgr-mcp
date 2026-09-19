@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { registerOperationRoutes } from './operations/routes.js';
 import { publicHandoffErrorHandler } from './operations/publicHandoffSecurity.js';
 import { createMcpServer } from './server.js';
+import { getOperatorSignerConfig } from './shared/operatorSignerConfig.js';
 import { getStarterGasConfig } from './shared/starterGasConfig.js';
 import { resolveTrustedClientIp, runWithMcpRequestContext } from './shared/requestContext.js';
 
@@ -13,13 +14,19 @@ app.disable('x-powered-by');
 
 app.get('/health', (_req, res) => {
   const starterGas = getStarterGasConfig();
+  const operatorSigner = getOperatorSignerConfig();
+  const signingScopes = [
+    ...(starterGas.enabled ? ['dedicated_starter_gas_service_wallet'] : []),
+    ...(operatorSigner.enabled ? ['dedicated_operator_wallet'] : [])
+  ];
   res.json({
     ok: true,
     name: env.serverName,
     readOnly: env.readOnly,
     userOperationsReadOnly: env.readOnly,
     starterGasEnabled: starterGas.enabled,
-    serverSigningScope: starterGas.enabled ? 'dedicated_starter_gas_service_wallet_only' : 'none',
+    operatorSignerEnabled: operatorSigner.enabled,
+    serverSigningScope: signingScopes.length > 0 ? signingScopes.join(',') : 'none',
     userOrThirdPartyPrivateKeysAccepted: false
   });
 });
