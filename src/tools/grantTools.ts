@@ -62,6 +62,82 @@ export function validateGrantItems(record: { items: unknown[] }, requestedRid: s
   return safeItems;
 }
 
+export function validateGrantSummaryItems(
+  items: unknown[], expectedScope: 1 | 2, expectedRid?: string
+): Array<{
+  rid: string; scope: 1 | 2; owner: string; grantee: string;
+  rights: number; expiresAt: number; isOwner: boolean;
+  refAddr: string | null; txHash: string | null;
+}> {
+  return items.map((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new Error('Malformed XGR grant row.');
+    const g = value as Record<string, unknown>;
+    if (typeof g.rid !== 'string' || !/^(?:0x)?[0-9a-fA-F]{64}$/.test(g.rid))
+      throw new Error('Invalid XGR grant RID.');
+    const normalizedRid = '0x' + g.rid.replace(/^0x/i, '').toLowerCase();
+    if ((expectedRid && normalizedRid !== expectedRid.toLowerCase()) || g.scope !== expectedScope)
+      throw new Error('XGR grant scope or RID differs from the query.');
+    if (typeof g.owner !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(g.owner)
+        || typeof g.grantee !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(g.grantee))
+      throw new Error('Invalid XGR grant owner or recipient.');
+    if (typeof g.rights !== 'number' || !Number.isSafeInteger(g.rights)
+        || g.rights < 0 || g.rights > 7)
+      throw new Error('Invalid XGR grant rights.');
+    if (typeof g.expiresAt !== 'number' || !Number.isSafeInteger(g.expiresAt) || g.expiresAt < 0)
+      throw new Error('Invalid XGR grant expiry.');
+    if (g.isOwner !== undefined && typeof g.isOwner !== 'boolean')
+      throw new Error('Invalid XGR grant owner flag.');
+    const refAddr = g.refAddr === undefined || g.refAddr === null || g.refAddr === ''
+      ? null : g.refAddr;
+    const txHash = g.txHash === undefined || g.txHash === null || g.txHash === ''
+      ? null : g.txHash;
+    if (refAddr !== null && (typeof refAddr !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(refAddr)))
+      throw new Error('Invalid XGR grant reference address.');
+    if (txHash !== null && (typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)))
+      throw new Error('Invalid XGR grant transaction hash.');
+    // No EncDEK in UI summaries. The decrypt-only tool returns a caller-owned
+    // encrypted envelope separately, after checking READ rights.
+    return {
+      rid: normalizedRid, scope: expectedScope,
+      owner: g.owner.toLowerCase(), grantee: g.grantee.toLowerCase(),
+      rights: g.rights, expiresAt: g.expiresAt, isOwner: g.isOwner === true,
+      refAddr, txHash
+    };
+  });
+}
+
+function parseRpcGrantRows(response: unknown): unknown[] {
+  if (!response || typeof response !== 'object' || Array.isArray(response))
+    throw new Error('Invalid XGR grants response.');
+  const record = response as Record<string, unknown>;
+  // Both keys are evidenced: XGR endpoint docs specify "items", while
+  // xDaLaWeb's deployed grantsService reads "grants".
+  const items = record.items;
+  const grants = record.grants;
+  if (items !== undefined && grants !== undefined)
+    throw new Error('Ambiguous XGR grants response.');
+  const rows = items !== undefined ? items : grants;
+  if (!Array.isArray(rows)) throw new Error('Missing XGR grant rows.');
+  return rows;
+}
+
+type SignedPermit = z.infer<typeof permit>;
+async function assertAuthorizedPermit(signedPermit: SignedPermit): Promise<number> {
+  const now = Math.floor(Date.now() / 1000);
+  if (signedPermit.message.expiry <= now || signedPermit.message.expiry > now + 300)
+    throw new Error('Grant permit must be valid for at most five minutes.');
+  if (!exactFields(signedPermit.types.EIP712Domain, DOMAIN_FIELDS)
+      || !exactFields(signedPermit.types.xdalaPermit, PERMIT_FIELDS))
+    throw new Error('Unexpected xdalaPermit EIP-712 type layout.');
+  const chainHex = await rpcCall<string>('eth_chainId');
+  if (typeof chainHex !== 'string' || !/^0x[0-9a-fA-F]+$/.test(chainHex))
+    throw new Error('XGR RPC returned invalid chain ID.');
+  if (Number(BigInt(chainHex)) !== signedPermit.domain.chainId)
+    throw new Error('xdalaPermit chain ID does not match the connected RPC.');
+  return now;
+}
+
 export function registerGrantTools(server: McpServer): void {
   server.registerTool(
     'list_xgr_grants_for_readkey',
@@ -76,36 +152,52 @@ export function registerGrantTools(server: McpServer): void {
       }
     },
     async ({ rid: requestedRid, scope, permit: signedPermit, limit }) => {
-      const now = Math.floor(Date.now() / 1000);
-      if (signedPermit.message.expiry <= now || signedPermit.message.expiry > now + 300)
-        throw new Error('Grant read permit must be valid for at most five minutes.');
-      if (!exactFields(signedPermit.types.EIP712Domain, DOMAIN_FIELDS)
-          || !exactFields(signedPermit.types.xdalaPermit, PERMIT_FIELDS))
-        throw new Error('Unexpected xdalaPermit EIP-712 type layout.');
-
-      // Verify RPC chain before submitting the signed permit.
-      const chainHex = await rpcCall<string>('eth_chainId');
-      if (typeof chainHex !== 'string' || !/^0x[0-9a-fA-F]+$/.test(chainHex))
-        throw new Error('XGR RPC returned invalid chain ID.');
-      if (Number(BigInt(chainHex)) !== signedPermit.domain.chainId)
-        throw new Error('xdalaPermit chain ID does not match the connected RPC.');
-
-      // The gateway does not determine who is allowed to decrypt.
-      // Access verification is performed by the XGR RPC and, independently,
-      // by the consuming backend's authenticated session/assignment checks.
-      const response: unknown = await rpcCall('xgr_listGrants', [{
-        scope,
-        rid: requestedRid,
-        validAt: now,
-        limit,
-        permit: signedPermit
-      }]);
-      if (!response || typeof response !== 'object' || Array.isArray(response))
-        throw new Error('Invalid XGR grants response.');
-      const record = response as Record<string, unknown>;
-      if (!Array.isArray(record.items)) throw new Error('Missing XGR grant items.');
-      const safeItems = validateGrantItems({ items: record.items }, requestedRid, scope, signedPermit.message.from, now);
+      const now = await assertAuthorizedPermit(signedPermit);
+      const rows = parseRpcGrantRows(await rpcCall('xgr_listGrants', [{
+        scope, rid: requestedRid, validAt: now, limit, permit: signedPermit
+      }]));
+      // Owners may also receive grants for other recipients. Only their own
+      // READ grant can be used by the decrypt path.
+      const mine = rows.filter((value) =>
+        value && typeof value === 'object' && !Array.isArray(value)
+        && typeof (value as Record<string, unknown>).grantee === 'string'
+        && ((value as Record<string, unknown>).grantee as string).toLowerCase() === signedPermit.message.from.toLowerCase()
+      );
+      if (mine.length !== 1)
+        throw new Error('Expected exactly one caller-owned XGR READ grant.');
+      const safeItems = validateGrantItems({ items: mine }, requestedRid, scope, signedPermit.message.from, now);
       return { content: [{ type: 'text', text: JSON.stringify({ rid: requestedRid, scope, grantee: signedPermit.message.from, items: safeItems }) }] };
     }
   );
+  server.registerTool(
+    'list_xgr_grants',
+    {
+      title: 'List XGR grants for Manage Grants',
+      description: 'List grants visible to the permit signer, optionally filtered by RID. This tool returns only grant metadata, never private keys, plaintext or EncDEK. XGR RPC authorizes which recipients may be listed based on the signed permit.',
+      inputSchema: {
+        scope: z.union([z.literal(1), z.literal(2)]),
+        rid: rid.optional(),
+        permit,
+        limit: z.number().int().min(1).max(100).default(100)
+      }
+    },
+    async ({ scope, rid: requestedRid, permit: signedPermit, limit }) => {
+      const now = await assertAuthorizedPermit(signedPermit);
+      const request = {
+        scope,
+        ...(requestedRid ? { rid: requestedRid } : {}),
+        limit,
+        permit: signedPermit
+      };
+      const rows = parseRpcGrantRows(await rpcCall('xgr_listGrants', [request]));
+      const grants = validateGrantSummaryItems(rows, scope, requestedRid);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ scope, wallet: signedPermit.message.from, grants })
+        }]
+      };
+    }
+  );
+
 }
