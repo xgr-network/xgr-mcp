@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateGrantItems, validateGrantSummaryItems } from '../src/tools/grantTools.js';
+import { validateGrantItems, validateGrantSummaryItems, validateGrantWriteEntries, verifyGrantMutationResponse } from '../src/tools/grantTools.js';
 
 const rid = '0x' + 'ab'.repeat(32);
 const grantee = '0x' + '12'.repeat(20);
@@ -72,4 +72,21 @@ test('Manage Grants rejects unexpected scope, invalid rights and malformed metad
     { ...base, refAddr: 'invalid' },
     { ...base, txHash: 'invalid' }
   ]) assert.throws(() => validateGrantSummaryItems([modified], 1, rid));
+});
+
+test('grant mutation validates revoke envelope and prevents privilege changes to owner', () => {
+  const revoke = { grantee: '0x' + '34'.repeat(20), rights: 0, expireAt: 0, encDEK: '0x' + '00'.repeat(141) };
+  assert.deepEqual(validateGrantWriteEntries([revoke], grantee, now), [revoke]);
+  assert.throws(() => validateGrantWriteEntries([{ ...revoke, encDEK: '0x04' + '00'.repeat(140) }], grantee, now));
+  assert.throws(() => validateGrantWriteEntries([{ ...revoke, grantee, isOwner: true }], grantee, now));
+  assert.throws(() => validateGrantWriteEntries([{ ...revoke, isOwner: true }], grantee, now));
+  assert.throws(() => validateGrantWriteEntries([revoke, revoke], grantee, now));
+  assert.throws(() => validateGrantWriteEntries([{ ...revoke, rights: 8 }], grantee, now));
+  assert.throws(() => validateGrantWriteEntries([{ ...revoke, rights: 1 }], grantee, now));
+});
+test('grant mutation rejects ambiguous write receipts instead of retrying', () => {
+  assert.equal(verifyGrantMutationResponse({ upserted: 1 }, 1), 1);
+  assert.throws(() => verifyGrantMutationResponse({ upserted: 0 }, 1));
+  assert.throws(() => verifyGrantMutationResponse({ upserted: '1' }, 1));
+  assert.throws(() => verifyGrantMutationResponse({}, 1));
 });
