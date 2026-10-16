@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateGrantItems, validateGrantSummaryItems, validateGrantWriteEntries, verifyGrantMutationResponse, assertGrantWriteEnabled } from '../src/tools/grantTools.js';
+import { validateGrantItems, validateGrantSummaryItems, validateGrantWriteEntries, verifyGrantMutationResponse, assertGrantWriteEnabled, registerGrantTools } from '../src/tools/grantTools.js';
 
 const rid = '0x' + 'ab'.repeat(32);
 const grantee = '0x' + '12'.repeat(20);
@@ -94,4 +94,16 @@ test('grant mutation rejects ambiguous write receipts instead of retrying', () =
 test('read-only XGR MCP refuses grant mutation before RPC', () => {
   assert.throws(() => assertGrantWriteEnabled(true), /read-only mode/);
   assert.doesNotThrow(() => assertGrantWriteEnabled(false));
+});
+
+test('read-only registration does not expose manage_xgr_grants', () => {
+  const names: string[] = [];
+  const server = { registerTool: (name: string) => { names.push(name); } } as unknown as Parameters<typeof registerGrantTools>[0];
+  registerGrantTools(server, true);
+  assert.ok(names.includes('list_xgr_grants'));
+  assert.ok(names.includes('list_xgr_grants_for_readkey'));
+  assert.ok(!names.includes('manage_xgr_grants'));
+  names.length = 0;
+  registerGrantTools(server, false);
+  assert.ok(names.includes('manage_xgr_grants'));
 });
