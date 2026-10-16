@@ -31,6 +31,37 @@ function exactFields(actual: Array<{ name: string; type: string }>, expected: ty
   return JSON.stringify(actual) === JSON.stringify(expected);
 }
 
+export function validateGrantItems(record: { items: unknown[] }, requestedRid: string, scope: 1 | 2, granteeAddress: string, now: number) {
+  const normalizedRid = requestedRid.slice(2).toLowerCase();
+  const grantee = granteeAddress.toLowerCase();
+  const safeItems = record.items.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+      throw new Error('Malformed grant item.');
+    const grant = item as Record<string, unknown>;
+    const itemRid = typeof grant.rid === 'string' ? grant.rid.replace(/^0x/i, '').toLowerCase() : '';
+    const itemScope = grant.scope;
+    const itemGrantee = typeof grant.grantee === 'string' ? grant.grantee.toLowerCase() : '';
+    const rights = grant.rights;
+    const expiresAt = grant.expiresAt;
+    const encDEK = grant.encDEK;
+    if (itemRid !== normalizedRid || itemScope !== scope || itemGrantee !== grantee
+        || !Number.isSafeInteger(rights) || typeof rights !== 'number' || (rights & 1) !== 1
+        || !Number.isSafeInteger(expiresAt) || typeof expiresAt !== 'number'
+        || (expiresAt !== 0 && expiresAt <= now)
+        || typeof encDEK !== 'string' || !/^0x[0-9a-fA-F]{282}$/.test(encDEK))
+      throw new Error('Grant does not match the requested wallet, scope, RID, READ access or expiry.');
+    return {
+      rid: requestedRid,
+      scope,
+      grantee: granteeAddress,
+      rights,
+      expiresAt,
+      encDEK
+    };
+  });
+  return safeItems;
+}
+
 export function registerGrantTools(server: McpServer): void {
   server.registerTool(
     'list_xgr_grants_for_readkey',
@@ -73,33 +104,7 @@ export function registerGrantTools(server: McpServer): void {
         throw new Error('Invalid XGR grants response.');
       const record = response as Record<string, unknown>;
       if (!Array.isArray(record.items)) throw new Error('Missing XGR grant items.');
-      const normalizedRid = requestedRid.slice(2).toLowerCase();
-      const grantee = signedPermit.message.from.toLowerCase();
-      const safeItems = record.items.map((item) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item))
-          throw new Error('Malformed grant item.');
-        const grant = item as Record<string, unknown>;
-        const itemRid = typeof grant.rid === 'string' ? grant.rid.replace(/^0x/i, '').toLowerCase() : '';
-        const itemScope = grant.scope;
-        const itemGrantee = typeof grant.grantee === 'string' ? grant.grantee.toLowerCase() : '';
-        const rights = grant.rights;
-        const expiresAt = grant.expiresAt;
-        const encDEK = grant.encDEK;
-        if (itemRid !== normalizedRid || itemScope !== scope || itemGrantee !== grantee
-            || !Number.isSafeInteger(rights) || typeof rights !== 'number' || (rights & 1) !== 1
-            || !Number.isSafeInteger(expiresAt) || typeof expiresAt !== 'number'
-            || (expiresAt !== 0 && expiresAt <= now)
-            || typeof encDEK !== 'string' || !/^0x[0-9a-fA-F]{282}$/.test(encDEK))
-          throw new Error('Grant does not match the requested wallet, scope, RID, READ access or expiry.');
-        return {
-          rid: requestedRid,
-          scope,
-          grantee: signedPermit.message.from,
-          rights,
-          expiresAt,
-          encDEK
-        };
-      });
+      const safeItems = validateGrantItems({ items: record.items }, requestedRid, scope, signedPermit.message.from, now);
       return { content: [{ type: 'text', text: JSON.stringify({ rid: requestedRid, scope, grantee: signedPermit.message.from, items: safeItems }) }] };
     }
   );
