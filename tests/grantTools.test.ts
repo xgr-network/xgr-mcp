@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateGrantItems, validateGrantSummaryItems, validateGrantWriteEntries, verifyGrantMutationResponse } from '../src/tools/grantTools.js';
+import { validateGrantItems, validateGrantSummaryItems, validateGrantWriteEntries, verifyGrantMutationResponse, assertGrantWriteEnabled } from '../src/tools/grantTools.js';
 
 const rid = '0x' + 'ab'.repeat(32);
 const grantee = '0x' + '12'.repeat(20);
@@ -89,4 +89,9 @@ test('grant mutation rejects ambiguous write receipts instead of retrying', () =
   assert.throws(() => verifyGrantMutationResponse({ upserted: 0 }, 1));
   assert.throws(() => verifyGrantMutationResponse({ upserted: '1' }, 1));
   assert.throws(() => verifyGrantMutationResponse({}, 1));
+});
+
+test('read-only XGR MCP refuses grant mutation before RPC', () => {
+  assert.throws(() => assertGrantWriteEnabled(true), /read-only mode/);
+  assert.doesNotThrow(() => assertGrantWriteEnabled(false));
 });
