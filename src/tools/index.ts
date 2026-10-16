@@ -12,6 +12,7 @@ import { registerSessionPayloadHistoryTools } from './sessionPayloadHistoryTools
 import { registerTransactionTools } from './transactionTools.js';
 import { registerXgrTools } from './xgrTools.js';
 import { registerGrantTools } from './grantTools.js';
+import { registerReadkeyTools } from './readkeyTools.js';
 import { registerXrcTools } from './xrcTools.js';
 import { registerXrcExecutorTools } from './xrcExecutorTools.js';
 import { writeToolUsage } from '../shared/usageLog.js';
@@ -239,6 +240,7 @@ export function registerTools(server: McpServer): void {
   registerReceiptTools(server);
   registerXgrTools(server);
   registerGrantTools(server);
+  registerReadkeyTools(server);
   registerXrcTools(server);
   registerXrcExecutorTools(server);
   registerOperationTools(server);
