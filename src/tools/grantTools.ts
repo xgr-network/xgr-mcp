@@ -2,6 +2,7 @@ import { ECDH } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { rpcCall } from '../adapters/rpcClient.js';
+import { env } from '../config/env.js';
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
 const rid = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
@@ -205,7 +206,11 @@ export function verifyGrantMutationResponse(result: unknown, expectedCount: numb
   return count;
 }
 
-export function registerGrantTools(server: McpServer): void {
+export function assertGrantWriteEnabled(readOnly: boolean): void {
+  if (readOnly) throw new Error('XGR MCP is in read-only mode; grant writes are disabled.');
+}
+
+export function registerGrantTools(server: McpServer, readOnly = env.readOnly): void {
   server.registerTool(
     'list_xgr_grants_for_readkey',
     {
@@ -267,7 +272,8 @@ export function registerGrantTools(server: McpServer): void {
     }
   );
 
-  server.registerTool(
+  // A read-only gateway must not advertise or execute mutating grant tools.
+  if (!readOnly) server.registerTool(
     'manage_xgr_grants',
     {
       title: 'Manage XGR encrypted grants',
@@ -291,6 +297,8 @@ export function registerGrantTools(server: McpServer): void {
       }
     },
     async ({ rid: targetRid, scope, permit: signedPermit, entries, refAddr, txHash, sessionId }) => {
+      // Enforce again at execution, before ANY RPC request or validation side effect.
+      assertGrantWriteEnabled(readOnly);
       const now = await assertAuthorizedPermit(signedPermit);
       const owner = signedPermit.message.from.toLowerCase();
       const writeEntries = validateGrantWriteEntries(entries, owner, now);
