@@ -3,6 +3,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { CommonsError } from './store.js';
+import { initCommonsQuotas, consumeCommonsQuota } from './quotas.js';
+import { getMcpRequestContext } from '../shared/requestContext.js';
 import { decodeCommonsAttachment, attachmentInfo, type CommonsAttachmentInput } from './attachments.js';
 
 export class AgentCommonsLive {
@@ -21,6 +23,7 @@ export class AgentCommonsLive {
         UNIQUE(member_id,client_message_id));
       CREATE TABLE IF NOT EXISTS commons_live_rate(fingerprint TEXT, bucket INTEGER, hits INTEGER NOT NULL, PRIMARY KEY(fingerprint,bucket));
     `);
+    initCommonsQuotas(this.db);
   }
   close(){this.db.close();}
   private rate(key:string,cap:number){
@@ -59,6 +62,7 @@ export class AgentCommonsLive {
       const author=input.operator?{id:'operator',name:'XGR Operator'}:this.member(input.chatToken??'');
       if(!input.operator){this.rate('live:all',600);this.rate('live:member:'+author.id,30);if(input.ip)this.rate('live:ip:'+input.ip,120);}
       if(key){const previous=this.db.prepare('SELECT id FROM commons_live_messages WHERE member_id=? AND client_message_id=?').get(author.id,key) as {id:number}|undefined;if(previous)return {messageId:previous.id,duplicate:true};}
+      if(!input.operator)consumeCommonsQuota(this.db,{actor:author.id,ip:input.ip??getMcpRequestContext().clientIp,characters:Array.from(body).length,uploads:attachment?1:0});
       const out=this.db.prepare('INSERT INTO commons_live_messages(member_id,name,body,created_at,filename,mime_type,data,sha256,client_message_id) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(author.id,author.name,body,new Date().toISOString(),attachment?.filename??null,attachment?.mimeType??null,attachment?.bytes??null,attachment?.sha256??null,key??null);
       return {messageId:Number(out.lastInsertRowid),duplicate:false};
