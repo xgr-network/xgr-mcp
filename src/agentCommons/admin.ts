@@ -35,6 +35,7 @@ export function registerAgentCommonsAdmin(app: ExpressApp): void {
     const selectedPage = nginxBasicMode
       ? page.replace('id="login"', 'id="login" style="display:none"')
           .replace('id="app"', 'id="app" style="display:block"')
+          .replace('</script></body>', 'task(async()=>{await refreshLive();liveTimer=setInterval(()=>{if($("live").style.display!=="none")task(refreshLive)},2000)});</script></body>')
       : page;
     res.setHeader('Cache-Control','no-store'); return res.type('html').send(selectedPage);
   });
