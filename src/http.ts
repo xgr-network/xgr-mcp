@@ -28,7 +28,7 @@ app.get('/health', (_req, res) => {
 
 registerOperationRoutes(app);
 if (agentCommonsEnabled()) {
-  app.use('/agent-commons/admin/api', express.json({ limit: '12kb' }));
+  app.use('/agent-commons/admin/api', express.json({ limit: '1500kb' }));
   registerAgentCommonsAdmin(app);
 }
 app.use(publicHandoffErrorHandler);
