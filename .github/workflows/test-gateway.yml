@@ -24,5 +24,8 @@ jobs:
         run: npm run typecheck
       - name: Test
         run: npm test
-      - name: Build
-        run: npm run build
+      - name: Compile gateway
+        run: npx tsc
+      # npm run build additionally downloads canonical XGR docs from a different GitHub repo.
+      # That remote fetch can return HTTP 403 without project-specific credentials;
+      # compile the gateway itself here and keep documentation sync in the deploy process.
