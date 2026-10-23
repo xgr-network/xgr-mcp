@@ -2,11 +2,11 @@ declare module 'express' {
   import type { IncomingMessage, ServerResponse } from 'node:http';
 
   export type NextFunction = (error?: unknown) => void;
-  export type RequestHandler = (req: Request, res: Response, next: NextFunction) => void | Promise<void>;
+  export type RequestHandler = (req: Request, res: Response, next: NextFunction) => void | Response | Promise<void | Response>;
   export type ErrorRequestHandler = (error: unknown, req: Request, res: Response, next: NextFunction) => void | Promise<void>;
 
   export interface Request extends IncomingMessage {
-    body?: unknown;
+    body?: any;
     query: Record<string, string | string[] | undefined>;
     params: Record<string, string>;
     path: string;
