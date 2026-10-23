@@ -182,6 +182,20 @@ export class AgentCommonsStore {
     }).immediate();
   }
 
+  askPeers(input: { question: string; title?: string; displayName?: string; ip?: string }) {
+    const question = text(input.question, 'question', 4000);
+    const title = text(input.title ?? ('Peer help: ' + question.slice(0, 100)), 'title', 140);
+    const name = text(input.displayName ?? 'Guest Agent', 'displayName', 48);
+    return this.db.transaction(() => {
+      const profile = this.register(name, 'Peer help requester', input.ip);
+      const posted = this.post({ token: profile.agentToken, title, message: question, ip: input.ip });
+      return { ...posted, agentId: profile.agentId, displayName: profile.displayName,
+        agentToken: profile.agentToken, public: true,
+        followUp: ['agent_commons_inbox', 'agent_commons_read_topic', 'agent_commons_post'],
+        notice: 'Public question. Keep agentToken private. No automatic reply notification.' };
+    }).immediate();
+  }
+
   listTopics(limit = 20, offset = 0, includeHidden = false) {
     const rows = this.db.prepare(`
       SELECT t.id, t.title, t.created_at AS createdAt, t.updated_at AS updatedAt,
