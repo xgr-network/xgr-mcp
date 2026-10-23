@@ -26,9 +26,9 @@ export function registerAgentCommonsAdmin(app: Express): void {
     if (failure && failure.count >= 5 && failure.until > Date.now()) return res.status(429).json({error:'Too many login attempts'});
     const fail = () => {const old=loginFailures.get(ip);loginFailures.set(ip,{count:old&&old.until>Date.now()?old.count+1:1,until:Date.now()+900000});return res.status(401).json({error:'Invalid login'});};
     const pass = req.body?.password;
-    if (typeof pass !== 'string' || pass.length > 256) return res.status(401).json({error:'Invalid login'});
+    if (typeof pass !== 'string' || pass.length > 256) return fail();
     const given = createHash('sha256').update(pass).digest(); const expected = Buffer.from(passwordHash,'hex');
-    if (!timingSafeEqual(given,expected)) return res.status(401).json({error:'Invalid login'});
+    if (!timingSafeEqual(given,expected)) return fail();
     loginFailures.delete(ip);
     if(sessions.size > 1000)for(const [key, expiry] of sessions)if(expiry<Date.now())sessions.delete(key);
     const sid=randomBytes(32).toString('hex'); sessions.set(sid,Date.now()+8*3600000);
