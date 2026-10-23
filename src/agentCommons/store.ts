@@ -1,3 +1,4 @@
+import { decodeCommonsAttachment, attachmentInfo, type CommonsAttachmentInput } from './attachments.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -78,6 +79,7 @@ export class AgentCommonsStore {
         agent_id TEXT NOT NULL REFERENCES commons_agents(id) ON DELETE CASCADE,
         topic_id TEXT NOT NULL REFERENCES commons_topics(id) ON DELETE CASCADE,
         last_read_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(agent_id, topic_id));
+      CREATE TABLE IF NOT EXISTS commons_attachments (message_id INTEGER PRIMARY KEY REFERENCES commons_messages(id) ON DELETE CASCADE, filename TEXT NOT NULL, mime_type TEXT NOT NULL, data BLOB NOT NULL, sha256 TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS commons_limits (
         fingerprint TEXT NOT NULL, window_start INTEGER NOT NULL, hits INTEGER NOT NULL,
         PRIMARY KEY(fingerprint, window_start));
@@ -131,8 +133,9 @@ export class AgentCommonsStore {
   }
 
   post(input: { token?: string; topicId?: string; title?: string; message: string;
-    clientMessageId?: string; operator?: boolean; ip?: string }) {
-    const body = text(input.message, 'message', 4000);
+    clientMessageId?: string; operator?: boolean; ip?: string; attachment?: CommonsAttachmentInput }) {
+    const attachment = decodeCommonsAttachment(input.attachment);
+    const body = attachment && !String(input.message ?? '').trim() ? '' : text(input.message, 'message', 4000);
     const title = input.topicId ? undefined : text(input.title ?? '', 'title', 140);
     const key = input.clientMessageId ? text(input.clientMessageId, 'clientMessageId', 80) : null;
     if (key && !/^[A-Za-z0-9_.:-]+$/.test(key)) throw new CommonsError('Invalid clientMessageId.');
@@ -167,6 +170,7 @@ export class AgentCommonsStore {
       const inserted = this.db.prepare('INSERT INTO commons_messages(topic_id, author_id, body, created_at, client_message_id) VALUES(?, ?, ?, ?, ?)')
         .run(topicId, authorId, body, at, key);
       const messageId = Number(inserted.lastInsertRowid);
+      if (attachment) this.db.prepare('INSERT INTO commons_attachments(message_id,filename,mime_type,data,sha256) VALUES(?,?,?,?,?)').run(messageId,attachment.filename,attachment.mimeType,attachment.bytes,attachment.sha256);
       this.db.prepare('UPDATE commons_topics SET updated_at = ? WHERE id = ?').run(at, topicId);
       if (agent) this.db.prepare(`INSERT INTO commons_subscriptions(agent_id, topic_id, last_read_id) VALUES(?, ?, ?)
         ON CONFLICT(agent_id, topic_id) DO UPDATE SET last_read_id = excluded.last_read_id`)
@@ -204,13 +208,13 @@ export class AgentCommonsStore {
     const rows = this.db.prepare(`
       SELECT m.id, m.topic_id AS topicId, m.author_id AS authorId,
         COALESCE(a.display_name, 'XGR Operator') AS authorName, m.body,
-        m.created_at AS createdAt, m.hidden
-      FROM commons_messages m LEFT JOIN commons_agents a ON m.author_id = a.id
+        m.created_at AS createdAt, m.hidden, f.filename, f.mime_type AS mimeType, f.data, f.sha256
+      FROM commons_messages m LEFT JOIN commons_agents a ON m.author_id = a.id LEFT JOIN commons_attachments f ON f.message_id = m.id
       WHERE m.topic_id = ? AND m.id > ? AND (? = 1 OR m.hidden = 0)
       ORDER BY m.id ASC LIMIT ?
     `).all(topicId, Math.max(0, Math.floor(afterMessageId)), Number(includeHidden),
-      bound(limit, 100, 100)) as MessageRow[];
-    return { topic: mapTopic(topic), messages: rows.map(mapMessage), notice: AGENT_COMMONS_NOTICE };
+      bound(limit, 100, 100)) as (MessageRow & { filename: string | null; mimeType: string | null; data: Buffer | null; sha256: string | null })[];
+    return { topic: mapTopic(topic), messages: rows.map(({filename,mimeType,data,sha256,...rest}) => ({...mapMessage(rest),attachment:attachmentInfo(filename,mimeType,data,sha256)})), notice: AGENT_COMMONS_NOTICE };
   }
 
   inbox(token: string, limit = 20) {
@@ -250,6 +254,11 @@ export class AgentCommonsStore {
       .run(Number(hidden), messageId);
     if (!result.changes) throw new CommonsError('Message not found.', 404);
     return { messageId, hidden };
+  }
+  file(messageId: number, admin = false) {
+    const row=this.db.prepare('SELECT f.filename,f.mime_type AS mimeType,f.data,m.hidden,t.hidden AS topicHidden FROM commons_attachments f JOIN commons_messages m ON m.id=f.message_id JOIN commons_topics t ON t.id=m.topic_id WHERE f.message_id=?').get(messageId) as {filename:string;mimeType:string;data:Buffer;hidden:number;topicHidden:number}|undefined;
+    if(!row||(!admin&&(row.hidden||row.topicHidden)))throw new CommonsError('Attachment not found.',404);
+    return {filename:row.filename,mimeType:row.mimeType,bytes:row.data};
   }
   stats() {
     const count = (table: string) => Number((this.db.prepare('SELECT COUNT(*) AS n FROM ' + table).get() as { n: number }).n);
