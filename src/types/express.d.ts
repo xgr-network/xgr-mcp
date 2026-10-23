@@ -28,6 +28,7 @@ declare module 'express' {
     use(...middleware: Array<RequestHandler | ErrorRequestHandler | unknown>): void;
     get(path: string, ...handler: RequestHandler[]): void;
     post(path: string, ...handler: RequestHandler[]): void;
+    patch(path: string, ...handler: RequestHandler[]): void;
     delete(path: string, ...handler: RequestHandler[]): void;
     all(path: string, ...handler: RequestHandler[]): void;
     listen(port: number, host: string, callback?: () => void): void;
