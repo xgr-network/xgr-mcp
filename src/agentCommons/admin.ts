@@ -32,7 +32,10 @@ export function registerAgentCommonsAdmin(app: ExpressApp): void {
   };
   app.get('/agent-commons/admin', (req, res) => {
     if (nginxBasicMode && !verifyNginxBasicAuth(req.headers.authorization, passwordHash, nginxUsername)) return res.status(401).send('Authentication required');
-    const selectedPage = nginxBasicMode ? page.replace('<section id=\\\"login\\\">', '<section id=\\\"login\\\" style=\\\"display:none\\\">').replace('<div id=\\\"app\\\">','<div id=\\\"app\\\" style=\\\"display:block\\\">').replace('let selected=', 'let selected=') : page;
+    const selectedPage = nginxBasicMode
+      ? page.replace('id="login"', 'id="login" style="display:none"')
+          .replace('id="app"', 'id="app" style="display:block"')
+      : page;
     res.setHeader('Cache-Control','no-store'); return res.type('html').send(selectedPage);
   });
   app.use('/agent-commons/admin/api', guard);
