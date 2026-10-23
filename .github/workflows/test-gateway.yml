@@ -1,0 +1,31 @@
+name: Verify XGR MCP gateway
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Compile gateway
+        run: npx tsc
+      # npm run build additionally downloads canonical XGR docs from a different GitHub repo.
+      # That remote fetch can return HTTP 403 without project-specific credentials;
+      # compile the gateway itself here and keep documentation sync in the deploy process.

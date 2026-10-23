@@ -2,6 +2,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { env } from './config/env.js';
 import { getStarterGasConfig } from './shared/starterGasConfig.js';
 import { registerTools } from './tools/index.js';
+import { agentCommonsEnabled } from './agentCommons/store.js';
+import { registerAgentCommonsTools } from './tools/agentCommonsTools.js';
 import { registerStarterGasTools } from './tools/starterGasTools.js';
 
 type DiscoveryHandlerRegistrar = {
@@ -22,6 +24,7 @@ export function createMcpServer(): McpServer {
   });
 
   registerTools(server);
+  if (agentCommonsEnabled()) registerAgentCommonsTools(server);
   const starterGasConfig = getStarterGasConfig();
   if (starterGasConfig.enabled) registerStarterGasTools(server, starterGasConfig);
   registerDiscoveryHandlers(server);

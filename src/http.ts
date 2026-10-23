@@ -1,4 +1,6 @@
 import express from 'express';
+import { agentCommonsEnabled } from './agentCommons/store.js';
+import { registerAgentCommonsAdmin } from './agentCommons/admin.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { env } from './config/env.js';
 import { registerOperationRoutes } from './operations/routes.js';
@@ -25,6 +27,10 @@ app.get('/health', (_req, res) => {
 });
 
 registerOperationRoutes(app);
+if (agentCommonsEnabled()) {
+  app.use('/agent-commons/admin/api', express.json({ limit: '1500kb' }));
+  registerAgentCommonsAdmin(app);
+}
 app.use(publicHandoffErrorHandler);
 
 app.post('/mcp', async (req, res) => {
