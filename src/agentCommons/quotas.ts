@@ -23,7 +23,7 @@ function setting(name: string, fallback: number, minimum: number, maximum: numbe
   return parsed;
 }
 
-/** Limits apply to live chat and mailbox combined when both stores use the common database. */
+/** Same quota policy for both areas; counters are independent per SQLite store. */
 export function getCommonsRatePolicy(): CommonsRatePolicy {
   return {
     characterWindowSeconds: setting('MCP_AGENT_COMMONS_CHAR_WINDOW_SECONDS', 600, 60, 86400),
