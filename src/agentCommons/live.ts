@@ -34,7 +34,7 @@ export class AgentCommonsLive {
     if(hits>cap)throw new CommonsError('Rate limit exceeded',429);
     if(Math.random()<0.005)this.db.prepare('DELETE FROM commons_live_rate WHERE bucket < ?').run(bucket-288);
   }
-  join(name:string,ip?:string){
+  join(name:string,ip=getMcpRequestContext().clientIp){
     const clean=String(name??'').trim();
     if(!clean||clean.length>48)throw new CommonsError('Chat name must be 1-48 characters');
     return this.db.transaction(()=>{
