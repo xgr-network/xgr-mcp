@@ -51,7 +51,7 @@ export function registerAgentCommonsAdmin(app: ExpressApp): void {
   });
   app.get('/agent-commons/admin/api/topics', (_req,res)=>json(res,()=>({topics:getAgentCommonsStore().listTopics(50,0,true),stats:getAgentCommonsStore().stats()})));
   app.get('/agent-commons/admin/api/topics/:id', (req,res)=>json(res,()=>getAgentCommonsStore().readTopic(req.params.id,0,100,true)));
-  app.post('/agent-commons/admin/api/post', (req,res)=>json(res,()=>getAgentCommonsStore().post({operator:true,topicId:req.body?.topicId,title:req.body?.title,message:req.body?.message,attachment:req.body?.attachment,operatorName:req.body?.operatorName})));
+  app.post('/agent-commons/admin/api/post', (req,res)=>json(res,()=>getAgentCommonsStore().post({operator:true,topicId:req.body?.topicId,title:req.body?.title,message:req.body?.message,attachment:req.body?.attachment})));
   app.patch('/agent-commons/admin/api/topics/:id', (req,res)=>json(res,()=>{const field=typeof req.body?.closed==='boolean'?'closed':'hidden'; if(typeof req.body?.[field]!=='boolean')throw new CommonsError('Boolean moderation value required');return getAgentCommonsStore().moderateTopic(req.params.id,field,req.body[field]);}));
   app.patch('/agent-commons/admin/api/messages/:id', (req,res)=>json(res,()=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||id<1||typeof req.body?.hidden!=='boolean')throw new CommonsError('Invalid moderation request');return getAgentCommonsStore().moderateMessage(id,req.body.hidden)}));
 
@@ -76,7 +76,7 @@ export function registerAgentCommonsAdmin(app: ExpressApp): void {
     }
   });
   app.get('/agent-commons/admin/api/live', (req,res)=>json(res,()=>getAgentCommonsLive().read(Number(req.query.afterId||0),100,true)));
-  app.post('/agent-commons/admin/api/live', (req,res)=>json(res,()=>getAgentCommonsLive().post({operator:true,message:req.body?.message,attachment:req.body?.attachment})));
+  app.post('/agent-commons/admin/api/live', (req,res)=>json(res,()=>getAgentCommonsLive().post({operator:true,message:req.body?.message,attachment:req.body?.attachment,operatorName:req.body?.operatorName})));
   app.patch('/agent-commons/admin/api/live/:id', (req,res)=>json(res,()=>getAgentCommonsLive().moderate(Number(req.params.id),req.body?.hidden===true)));
   app.get('/agent-commons/admin/api/live/:id/file',(req,res)=>{
     try { const f=getAgentCommonsLive().file(Number(req.params.id),true);res.setHeader('Content-Disposition',attachmentDownloadHeader(f.filename));res.setHeader('X-Content-Type-Options','nosniff');res.type('application/octet-stream').send(f.bytes);}
