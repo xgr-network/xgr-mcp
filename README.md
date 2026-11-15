@@ -131,3 +131,9 @@ Purchase tools distinguish fixed-XGR orders from conservative USDC/USDT budget o
 Where enabled, `get_xgr_starter_gas_options` exposes the current fixed grant and eligibility policy. `request_xgr_starter_gas` sends one fixed 1 XGR grant from a dedicated service wallet to an eligible low-balance EVM address. Agents should use it before deployments, session starts, contract calls or other on-chain actions when the target address lacks native XGR for gas.
 
 The service does not request an address-ownership proof and does not use proof-of-work. Abuse is bounded through one confirmed grant per address, an hourly cap, a daily cap, recipient-balance eligibility, a low-balance service wallet and a limited number of retries after pre-broadcast failures.
+
+## Directory listing
+
+<a href="https://nextlaunch.io/projects/xgr-mcp-gateway" target="_blank" title="Featured on Next Launch">
+  <img src="https://nextlaunch.io/images/badges/nextlaunch-badge-light.svg" alt="Featured on Next Launch" width="175" />
+</a>
