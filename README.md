@@ -1,5 +1,7 @@
 # XGR MCP Gateway
 
+> **XGRChain ecosystem baseline:** The currently published XGRChain node is **[v3.5.1](https://github.com/xgr-network/xgr-node/releases/tag/v3.5.1)** (15 November 2026, [official operator reference](https://github.com/xgr-network/XGR/blob/main/docs/chain/XGRCHAIN_v3.5.1_Release_and_Operations.md)). This is the **node** version, not this repository's package/release version. v3.5.1 changes Direct-BLS vote recovery durability (F-20) without a new staking/consensus fork or genesis migration.
+
 **XGR MCP Gateway** provides AI-native access to the XGR.Network stack through the [Model Context Protocol](https://modelcontextprotocol.io). It connects MCP-compatible agents such as Claude, ChatGPT, IDE assistants and custom hosts to XGRChain, XDaLa sessions, Explorer data, XRC standards and owner-reviewed on-chain action preparation.
 
 The gateway is designed for agent-assisted workflow creation: agents can inspect live chain evidence, reason over XDaLa process state, draft XRC artifacts and prepare handoffs that a user reviews and signs locally.
